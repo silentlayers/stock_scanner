@@ -73,33 +73,51 @@ def ensure_session():
             st.warning(
                 "You need to authorize with Tastytrade to fetch options data.")
 
+            # Check for existing token first
+            from integrations.tastytrade.token_manager import get_persistent_session
+            existing = get_persistent_session()
+            if existing:
+                if st.button("Use Saved Token"):
+                    session, token = existing
+                    st.session_state['auth_session'] = session
+                    st.session_state['oauth_token'] = token
+                    st.success("✅ Using saved token!")
+                    st.rerun()
+                st.info(
+                    "💡 Found a saved token. Click above to use it, or authorize again below.")
+
             col1, col2 = st.columns([2, 1])
             with col1:
                 if st.button("Authorize Tastytrade"):
+                    # Generate auth URL manually
+                    from integrations.tastytrade.config import get_oauth_settings, get_oauth_scopes
+                    from requests_oauthlib import OAuth2Session
+
+                    authorization_base_url, token_url, client_id, client_secret, redirect_uri = get_oauth_settings()
+                    oauth = OAuth2Session(
+                        client_id, redirect_uri=redirect_uri, scope=get_oauth_scopes())
+                    auth_url, state = oauth.authorization_url(
+                        authorization_base_url)
+
+                    st.markdown("### 🔐 Manual Authorization")
+                    st.info("**Copy this URL and open it in your browser:**")
+                    st.code(auth_url, language=None)
+                    st.link_button("🌐 Or Click Here to Open", auth_url)
+                    st.warning(
+                        "⚠️ After authorizing, the app will attempt to catch the callback automatically. Keep this window open!")
+
+                    # Try to start the auth flow in background
                     try:
-                        # First check for existing token
-                        from integrations.tastytrade.token_manager import get_persistent_session
-                        existing = get_persistent_session()
-                        if existing:
-                            session, token = existing
+                        with st.spinner("Waiting for authorization... (check your browser)"):
+                            session, token = authenticate()
                             st.session_state['auth_session'] = session
                             st.session_state['oauth_token'] = token
-                            st.success("✅ Using saved token!")
+                            st.success("✅ Authorized successfully!")
                             st.rerun()
-                        else:
-                            # Need to do full OAuth flow
-                            with st.spinner("Opening browser for authorization..."):
-                                st.info(
-                                    "👉 Check your browser - a new tab should open for TastyTrade login")
-                                session, token = authenticate()
-                                st.session_state['auth_session'] = session
-                                st.session_state['oauth_token'] = token
-                                st.success("Authorized successfully!")
-                                st.rerun()
                     except Exception as e:
-                        st.error(f"Authentication failed: {e}")
+                        st.error(f"❌ Authentication failed: {e}")
                         st.info(
-                            "💡 Make sure to complete the authorization in your browser")
+                            "💡 The browser callback may have failed. Try using the cloud deployment instead.")
             with col2:
                 if st.button("Clear Saved Token", help="Remove saved authentication token"):
                     clear_saved_token()
