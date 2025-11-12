@@ -2,8 +2,6 @@
 
 Personal SPY signal + put credit spread scanner with Tastytrade OAuth and DXLink snapshots.
 
-⚠️ **Important:** This app requires OAuth authentication with a local callback server. It **will not work on Streamlit Cloud's free tier**. For cloud deployment, use Railway, Render, or Fly.io instead.
-
 ## Quick start
 
 If you have Python 3.10+ installed, this one-liner will set up a virtualenv, install deps, and launch the UI:
@@ -28,20 +26,27 @@ pip install -r requirements.txt
 
 3. Create a `.env` in the project root:
 
-```
+```env
 TASTYTRADE_CLIENT_ID=your_client_id
 TASTYTRADE_CLIENT_SECRET=your_client_secret
+
+# For local development:
 TASTYTRADE_REDIRECT_URI=http://localhost:3000/callback
+
+# For Streamlit Cloud deployment:
+# TASTYTRADE_REDIRECT_URI=callbacksandboxtastytradeclientid2223931c-dbd5-40f7-af2b-30dd6.streamlit.app
+
 # Optional
-# TASTYTRADE_ENV=sandbox
-# Override OAuth scopes (default: "openid read trade")
+TASTYTRADE_USE_PRODUCTION=true  # or false for sandbox
 # TASTYTRADE_SCOPES="openid read trade"
 ```
 
 Notes:
 
-- Local HTTPS is disabled via `OAUTHLIB_INSECURE_TRANSPORT=1` to support localhost redirect during development.
-- Secrets remain on your machine.
+- **Local development:** Uses `http://localhost:3000/callback` - the app starts a local server
+- **Cloud deployment:** Use your Streamlit Cloud URL (e.g., `https://your-app.streamlit.app`)
+- Local HTTPS is disabled via `OAUTHLIB_INSECURE_TRANSPORT=1` for localhost OAuth
+- Secrets remain on your machine (local) or in Streamlit Cloud secrets (cloud)
 
 ## Run (CLI)
 
@@ -83,9 +88,32 @@ Modify `market_signal.py` (VIX < 20, RSI > 50, etc.) and `options_scanner.py` (D
 
 ## Cloud Deployment
 
-**Note:** This app requires OAuth with a local callback server, which doesn't work on Streamlit Cloud's free tier.
+### ✅ Streamlit Cloud (Now Supported!)
 
-### Recommended Options:
+This app now works on Streamlit Cloud using smart OAuth detection!
+
+**Setup:**
+
+1. Push to GitHub and deploy on [share.streamlit.io](https://share.streamlit.io)
+
+2. Add secrets in Streamlit Cloud dashboard:
+
+   ```toml
+   TASTYTRADE_CLIENT_ID = "your_client_id"
+   TASTYTRADE_CLIENT_SECRET = "your_client_secret"
+   TASTYTRADE_REDIRECT_URI = "https://your-app-name.streamlit.app"
+   TASTYTRADE_USE_PRODUCTION = "true"
+   ```
+
+3. **Important:** Update TastyTrade OAuth app to allow your Streamlit URL as redirect
+
+**How it works:**
+
+- **Cloud:** Uses URL query parameters (no server needed)
+- **Local:** Uses callback server automatically
+- Same credentials work for both!
+
+### Other Options:
 
 1. **Run Locally** (Easiest)
 
@@ -123,9 +151,9 @@ If you want to use Streamlit Cloud, you'll need to:
 
 ## Troubleshooting
 
-- **OAuth fails on cloud:** This app requires a local server for OAuth callbacks. Run locally or use Railway/Render.
-- If OAuth fails with https error: ensure redirect URI is http://localhost:3000/callback and the app sets `OAUTHLIB_INSECURE_TRANSPORT=1` (already handled by config.py import).
-- If yfinance columns seem odd, `data.get_close_series` normalizes to a 1D Series.
+- **OAuth on Streamlit Cloud:** Make sure `TASTYTRADE_REDIRECT_URI` in secrets matches your app URL exactly (e.g., `https://your-app.streamlit.app`)
+- **OAuth fails locally:** Ensure redirect URI is `http://localhost:3000/callback` and the app sets `OAUTHLIB_INSECURE_TRANSPORT=1` (already handled by config.py)
+- If yfinance columns seem odd, `data.get_close_series` normalizes to a 1D Series
 - If `GET /api-quote-tokens` returns 403 insufficient scopes:
-  - Ensure your account is a tastytrade customer (not just a username signup).
-  - Set `TASTYTRADE_SCOPES="openid read trade"` in `.env` (or as provided by tastytrade for streaming access), then delete `.tastytrade_tokens.json` and re-run to trigger a fresh OAuth with updated scopes.
+  - Ensure your account is a tastytrade customer (not just a username signup)
+  - Set `TASTYTRADE_SCOPES="openid read trade"` in `.env`, then delete `.tastytrade_tokens.json` and re-authorize
