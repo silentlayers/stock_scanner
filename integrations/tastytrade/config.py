@@ -92,15 +92,31 @@ def get_oauth_settings() -> Tuple[str, str, str, str, str]:
                 "   Or test with production (set TASTYTRADE_USE_PRODUCTION=true)")
             raise SystemExit(1)
 
+    # Auto-detect redirect URI based on environment
     redirect_uri = os.getenv('TASTYTRADE_REDIRECT_URI')
+    if not redirect_uri:
+        # Check if running on Streamlit Cloud
+        hostname = os.getenv('HOSTNAME', '')
+        if hostname.startswith('streamlit'):
+            # On Streamlit Cloud - use STREAMLIT_APP_URL if set, otherwise warn
+            redirect_uri = os.getenv('STREAMLIT_APP_URL')
+            if not redirect_uri:
+                print("⚠️  Running on Streamlit Cloud but STREAMLIT_APP_URL not set")
+                print("   Please set STREAMLIT_APP_URL in Streamlit Cloud secrets")
+                print("   Example: STREAMLIT_APP_URL = 'https://your-app.streamlit.app'")
+        else:
+            # Local development - use localhost
+            redirect_uri = 'http://localhost:3000/callback'
+            print(f"ℹ️  Using default local redirect URI: {redirect_uri}")
 
     if not client_id or not client_secret or not redirect_uri:
         print("❌ Missing required environment variables")
         if not use_production:
-            print("   Need: SANDBOX_TASTYTRADE_CLIENT_ID, SANDBOX_TASTYTRADE_CLIENT_SECRET, TASTYTRADE_REDIRECT_URI")
+            print("   Need: SANDBOX_TASTYTRADE_CLIENT_ID, SANDBOX_TASTYTRADE_CLIENT_SECRET")
         else:
             print(
-                "   Need: TASTYTRADE_CLIENT_ID, TASTYTRADE_CLIENT_SECRET, TASTYTRADE_REDIRECT_URI")
+                "   Need: TASTYTRADE_CLIENT_ID, TASTYTRADE_CLIENT_SECRET")
+        print("   And either: TASTYTRADE_REDIRECT_URI or STREAMLIT_APP_URL (on cloud)")
         raise SystemExit(1)
 
     return authorization_base_url, token_url, str(client_id), str(client_secret), str(redirect_uri)
