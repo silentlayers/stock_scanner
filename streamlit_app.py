@@ -76,15 +76,30 @@ def ensure_session():
             col1, col2 = st.columns([2, 1])
             with col1:
                 if st.button("Authorize Tastytrade"):
-                    with st.spinner("Checking for saved token..."):
-                        try:
-                            session, token = authenticate()
+                    try:
+                        # First check for existing token
+                        from integrations.tastytrade.token_manager import get_persistent_session
+                        existing = get_persistent_session()
+                        if existing:
+                            session, token = existing
                             st.session_state['auth_session'] = session
                             st.session_state['oauth_token'] = token
-                            st.success("Authorized successfully!")
+                            st.success("✅ Using saved token!")
                             st.rerun()
-                        except Exception as e:
-                            st.error(f"Authentication failed: {e}")
+                        else:
+                            # Need to do full OAuth flow
+                            with st.spinner("Opening browser for authorization..."):
+                                st.info(
+                                    "👉 Check your browser - a new tab should open for TastyTrade login")
+                                session, token = authenticate()
+                                st.session_state['auth_session'] = session
+                                st.session_state['oauth_token'] = token
+                                st.success("Authorized successfully!")
+                                st.rerun()
+                    except Exception as e:
+                        st.error(f"Authentication failed: {e}")
+                        st.info(
+                            "💡 Make sure to complete the authorization in your browser")
             with col2:
                 if st.button("Clear Saved Token", help="Remove saved authentication token"):
                     clear_saved_token()
