@@ -893,7 +893,7 @@ with tab_spreads:
 
                 # Initialize safety manager based on environment
                 is_production = os.getenv(
-                    'TASTYTRADE_ENV', 'sandbox') == 'production'
+                    'TASTYTRADE_USE_PRODUCTION', 'true').lower() in ('true', '1', 'yes')
 
                 if is_production:
                     st.warning("⚠️ **PRODUCTION MODE** - Real money at risk!")
@@ -1112,7 +1112,9 @@ with tab_spreads:
                                         order_cols[2].error(
                                             f"🛑 Stop Loss\n\nID: {orders[2].get('id', 'N/A')}")
 
-                                if os.getenv('TASTYTRADE_ENV', 'sandbox') == 'sandbox':
+                                is_production = os.getenv(
+                                    'TASTYTRADE_USE_PRODUCTION', 'true').lower() in ('true', '1', 'yes')
+                                if not is_production:
                                     st.write(
                                         "**Reminder:** This is sandbox - orders use simulated fills:")
                                     st.write("- Market orders fill at $1")

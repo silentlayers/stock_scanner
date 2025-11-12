@@ -26,45 +26,57 @@ def _configure_oauthlib_for_local_dev() -> None:
 def get_api_base_url() -> str:
     """Return the API base URL based on environment.
 
-    Honors TASTYTRADE_ENV = 'sandbox' | 'production' (default production).
-    Sandbox: api.cert.tastyworks.com (resets every 24 hours)
-    Production: api.tastyworks.com (live trading)
+    Honors TASTYTRADE_USE_PRODUCTION = 'true' | 'false' (default true).
+    Production (true): api.tastyworks.com (live trading)
+    Sandbox (false): api.cert.tastyworks.com (resets every 24 hours)
     """
-    env = os.getenv('TASTYTRADE_ENV', 'production').lower()
-    if env == 'sandbox':
-        return 'https://api.cert.tastyworks.com'
-    else:
+    use_production = os.getenv(
+        'TASTYTRADE_USE_PRODUCTION', 'true').lower() in ('true', '1', 'yes')
+    if use_production:
         return 'https://api.tastyworks.com'
+    else:
+        return 'https://api.cert.tastyworks.com'
 
 
 def get_streamer_url() -> str:
     """Return the WebSocket streamer URL based on environment.
 
-    Honors TASTYTRADE_ENV = 'sandbox' | 'production' (default production).
+    Honors TASTYTRADE_USE_PRODUCTION = 'true' | 'false' (default true).
     """
-    env = os.getenv('TASTYTRADE_ENV', 'production').lower()
-    if env == 'sandbox':
-        return 'wss://streamer.cert.tastyworks.com'
-    else:
+    use_production = os.getenv(
+        'TASTYTRADE_USE_PRODUCTION', 'true').lower() in ('true', '1', 'yes')
+    if use_production:
         return 'wss://streamer.tastyworks.com'
+    else:
+        return 'wss://streamer.cert.tastyworks.com'
 
 
 def is_sandbox() -> bool:
     """Check if running in sandbox environment."""
-    return os.getenv('TASTYTRADE_ENV', 'production').lower() == 'sandbox'
+    use_production = os.getenv(
+        'TASTYTRADE_USE_PRODUCTION', 'true').lower() in ('true', '1', 'yes')
+    return not use_production
 
 
 def get_oauth_settings() -> Tuple[str, str, str, str, str]:
     """Return OAuth settings (authorization URL, token URL, client_id, client_secret, redirect_uri).
 
-    Honors TASTYTRADE_ENV = 'sandbox' | 'production' (default production).
+    Honors TASTYTRADE_USE_PRODUCTION = 'true' | 'false' (default true).
 
-    For sandbox, tries TASTYTRADE_SANDBOX_CLIENT_ID first, falls back to TASTYTRADE_CLIENT_ID.
+    For sandbox, tries SANDBOX_TASTYTRADE_CLIENT_ID first.
     Note: Sandbox requires separate OAuth credentials from Tastytrade support.
     Contact api.support@tastytrade.com to request sandbox client credentials.
     """
-    env = os.getenv('TASTYTRADE_ENV', 'production').lower()
-    if env == 'sandbox':
+    use_production = os.getenv(
+        'TASTYTRADE_USE_PRODUCTION', 'true').lower() in ('true', '1', 'yes')
+
+    if use_production:
+        authorization_base_url = 'https://my.tastytrade.com/auth.html'
+        token_url = 'https://api.tastyworks.com/oauth/token'
+        # Production uses standard credentials
+        client_id = os.getenv('TASTYTRADE_CLIENT_ID')
+        client_secret = os.getenv('TASTYTRADE_CLIENT_SECRET')
+    else:
         authorization_base_url = 'https://cert-my.staging-tasty.works/auth.html'
         token_url = 'https://api.cert.tastyworks.com/oauth/token'
         # Sandbox uses separate credentials
@@ -77,20 +89,14 @@ def get_oauth_settings() -> Tuple[str, str, str, str, str]:
                 "   Set SANDBOX_TASTYTRADE_CLIENT_ID and SANDBOX_TASTYTRADE_CLIENT_SECRET")
             print("\n💡 Contact api.support@tastytrade.com to request sandbox credentials")
             print(
-                "   Or test with paper trading (unset TASTYTRADE_ENV or set to 'production')")
+                "   Or test with production (set TASTYTRADE_USE_PRODUCTION=true)")
             raise SystemExit(1)
-    else:
-        authorization_base_url = 'https://my.tastytrade.com/auth.html'
-        token_url = 'https://api.tastyworks.com/oauth/token'
-        # Production uses standard credentials
-        client_id = os.getenv('TASTYTRADE_CLIENT_ID')
-        client_secret = os.getenv('TASTYTRADE_CLIENT_SECRET')
 
     redirect_uri = os.getenv('TASTYTRADE_REDIRECT_URI')
 
     if not client_id or not client_secret or not redirect_uri:
         print("❌ Missing required environment variables")
-        if env == 'sandbox':
+        if not use_production:
             print("   Need: SANDBOX_TASTYTRADE_CLIENT_ID, SANDBOX_TASTYTRADE_CLIENT_SECRET, TASTYTRADE_REDIRECT_URI")
         else:
             print(
