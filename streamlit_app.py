@@ -53,11 +53,13 @@ def is_running_on_cloud():
         return True
 
     # Check multiple indicators of Streamlit Cloud
+    hostname = os.getenv('HOSTNAME', '')
     cloud_indicators = [
         os.getenv('STREAMLIT_SHARING_MODE') is not None,
-        os.getenv('HOSTNAME', '').startswith('streamlit-'),
+        # Changed from 'streamlit-' to 'streamlit'
+        hostname.startswith('streamlit'),
         os.getenv('IS_STREAMLIT_CLOUD') is not None,
-        'streamlit.app' in os.getenv('HOSTNAME', ''),
+        'streamlit.app' in hostname,
         os.getenv('STREAMLIT_RUNTIME_ENVIRONMENT') == 'cloud',
     ]
 
