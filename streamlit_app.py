@@ -48,14 +48,35 @@ def load_market_data():
 
 def is_running_on_cloud():
     """Detect if running on Streamlit Cloud"""
-    return os.getenv('STREAMLIT_SHARING_MODE') is not None or \
-        os.getenv('HOSTNAME', '').startswith('streamlit-')
+    # Allow manual override for testing
+    if os.getenv('FORCE_CLOUD_AUTH', 'false').lower() in ('true', '1', 'yes'):
+        return True
+
+    # Check multiple indicators of Streamlit Cloud
+    cloud_indicators = [
+        os.getenv('STREAMLIT_SHARING_MODE') is not None,
+        os.getenv('HOSTNAME', '').startswith('streamlit-'),
+        os.getenv('IS_STREAMLIT_CLOUD') is not None,
+        'streamlit.app' in os.getenv('HOSTNAME', ''),
+        os.getenv('STREAMLIT_RUNTIME_ENVIRONMENT') == 'cloud',
+    ]
+
+    return any(cloud_indicators)
 
 
 def ensure_session():
     if 'auth_session' not in st.session_state or st.session_state['auth_session'] is None:
         # Use cloud-friendly auth if on cloud, local auth otherwise
-        if is_running_on_cloud():
+        on_cloud = is_running_on_cloud()
+
+        # Debug info (can remove later)
+        if on_cloud:
+            st.caption("🌐 Detected: Streamlit Cloud - Using URL-based OAuth")
+        else:
+            st.caption(
+                "💻 Detected: Local environment - Using callback server OAuth")
+
+        if on_cloud:
             from integrations.tastytrade.cloud_auth import authenticate_cloud
 
             # Try to get auth from URL query params or show auth link
