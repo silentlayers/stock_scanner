@@ -46,20 +46,46 @@ def load_market_data():
     return spy, vix, spy_close, vix_close, inds
 
 
+def is_running_on_cloud():
+    """Detect if running on Streamlit Cloud"""
+    return os.getenv('STREAMLIT_SHARING_MODE') is not None or \
+        os.getenv('HOSTNAME', '').startswith('streamlit-')
+
+
 def ensure_session():
     if 'auth_session' not in st.session_state or st.session_state['auth_session'] is None:
+        # Check if running on cloud
+        if is_running_on_cloud():
+            st.error("⚠️ **Cloud Deployment Detected**")
+            st.warning("""
+            This app requires OAuth authentication which doesn't work on Streamlit Cloud's free tier.
+            
+            **Options:**
+            1. **Run locally** - Clone the repo and run with `streamlit run streamlit_app.py`
+            2. **Use API tokens** - Store TastyTrade session tokens in Streamlit Cloud secrets
+            3. **Deploy elsewhere** - Use Railway, Render, or Fly.io which support OAuth callbacks
+            
+            See the README for deployment instructions.
+            """)
+            st.stop()
+
         st.warning("You need to authorize with Tastytrade to fetch options data.")
 
         col1, col2 = st.columns([2, 1])
         with col1:
             if st.button("Authorize Tastytrade"):
                 with st.spinner("Checking for saved token..."):
-                    session, token = authenticate()
-                    st.session_state['auth_session'] = session
-                    st.session_state['oauth_token'] = token
-                    st.success("Authorized successfully!")
-                    # Force page rerun to refresh the Spreads tab content
-                    st.rerun()
+                    try:
+                        session, token = authenticate()
+                        st.session_state['auth_session'] = session
+                        st.session_state['oauth_token'] = token
+                        st.success("Authorized successfully!")
+                        # Force page rerun to refresh the Spreads tab content
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Authentication failed: {e}")
+                        st.info(
+                            "💡 Make sure you're running this locally, not on Streamlit Cloud")
         with col2:
             if st.button("Clear Saved Token", help="Remove saved authentication token"):
                 clear_saved_token()

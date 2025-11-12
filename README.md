@@ -2,6 +2,8 @@
 
 Personal SPY signal + put credit spread scanner with Tastytrade OAuth and DXLink snapshots.
 
+⚠️ **Important:** This app requires OAuth authentication with a local callback server. It **will not work on Streamlit Cloud's free tier**. For cloud deployment, use Railway, Render, or Fly.io instead.
+
 ## Quick start
 
 If you have Python 3.10+ installed, this one-liner will set up a virtualenv, install deps, and launch the UI:
@@ -79,8 +81,49 @@ You can also use the included `run.sh`, which creates `.venv/`, installs `requir
 
 Modify `market_signal.py` (VIX < 20, RSI > 50, etc.) and `options_scanner.py` (DTE/delta ranges, ROR threshold) to your liking. You can also parameterize via env vars or Streamlit widgets.
 
+## Cloud Deployment
+
+**Note:** This app requires OAuth with a local callback server, which doesn't work on Streamlit Cloud's free tier.
+
+### Recommended Options:
+
+1. **Run Locally** (Easiest)
+
+   ```bash
+   git clone https://github.com/silentlayers/stock_scanner.git
+   cd stock_scanner
+   ./run.sh
+   ```
+
+2. **Railway** (Best for cloud)
+
+   - Free $5/month credit
+   - Supports OAuth callbacks
+   - Add environment variables in dashboard
+   - Deploy directly from GitHub
+
+3. **Render**
+
+   - Free tier with 512MB RAM
+   - Configure redirect URI to your Render URL
+   - Note: Sleeps after 15min inactivity
+
+4. **Fly.io**
+   - Free tier available
+   - Requires Dockerfile (not included)
+   - More complex setup
+
+### For Streamlit Cloud Users:
+
+If you want to use Streamlit Cloud, you'll need to:
+
+1. Remove OAuth dependency
+2. Use TastyTrade session tokens directly (store in secrets)
+3. Modify authentication to use token-based auth instead of OAuth
+
 ## Troubleshooting
 
+- **OAuth fails on cloud:** This app requires a local server for OAuth callbacks. Run locally or use Railway/Render.
 - If OAuth fails with https error: ensure redirect URI is http://localhost:3000/callback and the app sets `OAUTHLIB_INSECURE_TRANSPORT=1` (already handled by config.py import).
 - If yfinance columns seem odd, `data.get_close_series` normalizes to a 1D Series.
 - If `GET /api-quote-tokens` returns 403 insufficient scopes:
