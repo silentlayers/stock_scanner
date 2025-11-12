@@ -93,19 +93,21 @@ def get_oauth_settings() -> Tuple[str, str, str, str, str]:
             raise SystemExit(1)
 
     # Auto-detect redirect URI based on environment
-    redirect_uri = os.getenv('TASTYTRADE_REDIRECT_URI')
-    if not redirect_uri:
-        # Check if running on Streamlit Cloud
-        hostname = os.getenv('HOSTNAME', '')
-        if hostname.startswith('streamlit'):
-            # On Streamlit Cloud - use STREAMLIT_APP_URL if set, otherwise warn
-            redirect_uri = os.getenv('STREAMLIT_APP_URL')
-            if not redirect_uri:
-                print("⚠️  Running on Streamlit Cloud but STREAMLIT_APP_URL not set")
-                print("   Please set STREAMLIT_APP_URL in Streamlit Cloud secrets")
-                print("   Example: STREAMLIT_APP_URL = 'https://your-app.streamlit.app'")
-        else:
-            # Local development - use localhost
+    # Check if running on Streamlit Cloud first
+    hostname = os.getenv('HOSTNAME', '')
+    if hostname.startswith('streamlit'):
+        # On Streamlit Cloud - use STREAMLIT_APP_URL
+        redirect_uri = os.getenv('STREAMLIT_APP_URL')
+        if not redirect_uri:
+            print("⚠️  Running on Streamlit Cloud but STREAMLIT_APP_URL not set")
+            print("   Please set STREAMLIT_APP_URL in Streamlit Cloud secrets")
+            print("   Example: STREAMLIT_APP_URL = 'https://your-app.streamlit.app'")
+            # Fall back to manual setting
+            redirect_uri = os.getenv('TASTYTRADE_REDIRECT_URI')
+    else:
+        # Local development - check manual setting first, then default
+        redirect_uri = os.getenv('TASTYTRADE_REDIRECT_URI')
+        if not redirect_uri:
             redirect_uri = 'http://localhost:3000/callback'
             print(f"ℹ️  Using default local redirect URI: {redirect_uri}")
 
