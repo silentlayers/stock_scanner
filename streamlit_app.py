@@ -745,11 +745,6 @@ with tab_signal:
 
             st.altair_chart(combined_chart, use_container_width=True)
 
-            # Add spacing and info caption after charts
-            st.write("")
-            st.caption(
-                "📊 Data cached 15 minutes. OAuth tokens saved locally; secrets stay on your machine. Tokens auto-refresh when possible."
-            )
     except Exception as e:
         st.error(f"Failed to render chart: {e}")
 
