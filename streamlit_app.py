@@ -118,6 +118,19 @@ st.markdown("""
     .vega-embed {
         width: 100% !important;
     }
+    
+    /* Prevent captions from floating into charts */
+    .element-container:has(> .stCaption) {
+        position: relative;
+        clear: both;
+        margin-top: 1rem;
+    }
+    
+    /* Add spacing before horizontal dividers */
+    hr {
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -2385,6 +2398,8 @@ with tab_backtest:
                 st.dataframe(df_show, use_container_width=True)
 
 # Footer caption - placed at the bottom after all tabs
+st.write("")  # Add spacing
+st.write("")  # Add more spacing
 st.divider()
 st.caption(
     "📊 Data cached 15 minutes. OAuth tokens saved locally; secrets stay on your machine. Tokens auto-refresh when possible."
