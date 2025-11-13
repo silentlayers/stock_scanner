@@ -77,6 +77,17 @@ st.markdown("""
             max-height: 300px;
         }
         
+        /* Faster rendering - reduce animations */
+        * {
+            transition: none !important;
+            animation: none !important;
+        }
+        
+        /* Hide heavy elements initially */
+        .stSpinner {
+            min-height: 100px;
+        }
+        
         /* Make tabs scrollable */
         .stTabs [data-baseweb="tab-list"] {
             overflow-x: auto;
@@ -136,16 +147,28 @@ st.markdown("""
 
 st.title("Stock Scanner")
 
-# Auto-refresh every 30 seconds during market hours
-if 'last_refresh' not in st.session_state:
-    st.session_state.last_refresh = time_module.time()  # Initialize last refresh time
+# Detect mobile device
 
-if time_module.time() - st.session_state.last_refresh > 30:
+
+def is_mobile():
+    """Detect if user is on mobile based on viewport width"""
+    # Use JavaScript to detect screen width
+    mobile_check = st.query_params.get('mobile', 'false')
+    return mobile_check == 'true'
+
+
+# Auto-refresh every 30 seconds during market hours (60 seconds on mobile for better performance)
+if 'last_refresh' not in st.session_state:
+    st.session_state.last_refresh = time_module.time()
+
+refresh_interval = 60 if is_mobile() else 30  # Longer refresh on mobile
+if time_module.time() - st.session_state.last_refresh > refresh_interval:
     st.session_state.last_refresh = time_module.time()
     st.rerun()
 
 
-@st.cache_data(ttl=900)  # cache downloads for 15 minutes
+# cache downloads for 15 minutes, hide spinner
+@st.cache_data(ttl=900, show_spinner=False)
 def load_market_data():
     spy = download_symbol('SPY', period='200d',
                           interval='1d', auto_adjust=False)
@@ -350,6 +373,7 @@ tab_signal, tab_spreads, tab_backtest = st.tabs(
     ["Signal", "Spreads", "Backtest"])
 
 with tab_signal:
+    # Lazy load market data only when Signal tab is active
     with st.spinner("Loading market data..."):
         spy, vix, spy_close, vix_close, inds = load_market_data()
     ema21 = inds['ema21']
@@ -450,6 +474,13 @@ with tab_signal:
             pass
 
         # Limit to the last N days to avoid compressing scale
+        # Use fewer days on mobile for better performance
+        if 'HTTP_USER_AGENT' in st.context.headers:
+            user_agent = st.context.headers['HTTP_USER_AGENT'].lower()
+            is_mobile_device = any(x in user_agent for x in [
+                                   'mobile', 'android', 'iphone', 'ipad'])
+            days = 90 if is_mobile_device else days  # Reduce to 90 days on mobile
+
         if isinstance(idx, pd.DatetimeIndex) and len(idx) > 0:
             last_date = idx.max()
             cutoff = last_date - pd.Timedelta(days=days)
@@ -470,6 +501,15 @@ with tab_signal:
 
         # Tailor to EMA availability: drop days where EMA isn't available
         df_plot = df_plot.dropna(subset=['EMA21'])
+
+        # On mobile, sample every other point to reduce rendering load
+        if 'HTTP_USER_AGENT' in st.context.headers:
+            user_agent = st.context.headers['HTTP_USER_AGENT'].lower()
+            is_mobile_device = any(x in user_agent for x in [
+                                   'mobile', 'android', 'iphone', 'ipad'])
+            if is_mobile_device and len(df_plot) > 60:
+                # Sample every 2nd point on mobile for faster rendering
+                df_plot = df_plot.iloc[::2].copy()
 
         # Enrich with MACD, RSI, and VIX aligned by date for per-day checks
         if not df_plot.empty:
