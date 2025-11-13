@@ -743,7 +743,23 @@ with tab_signal:
                 x='shared'
             )
 
-            st.altair_chart(combined_chart, use_container_width=True)
+            # Check if mobile device - skip chart rendering for performance
+            mobile_device = False
+            if 'HTTP_USER_AGENT' in st.context.headers:
+                user_agent = st.context.headers['HTTP_USER_AGENT'].lower()
+                mobile_device = any(x in user_agent for x in [
+                                    'mobile', 'android', 'iphone', 'ipad'])
+
+            if mobile_device:
+                st.info(
+                    "📱 **Mobile Mode**: Chart rendering disabled for faster performance. Use desktop to view interactive charts.")
+            else:
+                st.altair_chart(combined_chart, use_container_width=True)
+
+            # Add caption
+            st.write("")
+            st.caption(
+                "📊 Data cached 15 minutes. OAuth tokens saved locally; secrets stay on your machine. Tokens auto-refresh when possible.")
 
     except Exception as e:
         st.error(f"Failed to render chart: {e}")
