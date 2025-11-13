@@ -1957,9 +1957,6 @@ with tab_spreads:
     else:
         st.info("👆 Please authorize with Tastytrade above to view options data.")
 
-st.caption(
-    "Data cached 15 minutes. OAuth tokens saved locally; secrets stay on your machine. Tokens auto-refresh when possible.")
-
 with tab_backtest:
     st.subheader("Historical Backtest")
     st.caption("Uses daily SPY and VIX with Black-Scholes to approximate 45D vertical spreads on signal days. Indicative only.")
@@ -2386,3 +2383,9 @@ with tab_backtest:
                         df_show[col] = df_show[col].map(
                             lambda x: round(float(x), 2))
                 st.dataframe(df_show, use_container_width=True)
+
+# Footer caption - placed at the bottom after all tabs
+st.divider()
+st.caption(
+    "📊 Data cached 15 minutes. OAuth tokens saved locally; secrets stay on your machine. Tokens auto-refresh when possible."
+)
