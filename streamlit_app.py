@@ -164,10 +164,36 @@ st.markdown("""
 
 st.title("Stock Scanner")
 
-# Detect mobile device
+# Auto-detect mobile and set session state
+if 'mobile_checked' not in st.session_state:
+    st.session_state.mobile_checked = False
+    st.session_state.is_mobile_device = False
+
+# Run mobile detection once using components
+if not st.session_state.mobile_checked:
+    import streamlit.components.v1 as components
+    
+    # Inject script to detect mobile and redirect with query param
+    components.html("""
+        <script>
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth <= 768;
+            const url = new URL(window.location.href);
+            
+            if (isMobile && !url.searchParams.has('m')) {
+                url.searchParams.set('m', '1');
+                window.location.href = url.toString();
+            } else if (!isMobile && url.searchParams.has('m')) {
+                url.searchParams.delete('m');
+                window.location.href = url.toString();
+            }
+        </script>
+    """, height=0)
+    
+    st.session_state.mobile_checked = True
+
 def is_mobile():
-    """Detect if user is on mobile based on query param set by JavaScript"""
-    return st.query_params.get('_mobile', 'false') == 'true'
+    """Check if mobile mode via query param"""
+    return st.query_params.get('m') == '1'
 
 
 # Auto-refresh every 30 seconds during market hours (60 seconds on mobile for better performance)
