@@ -743,18 +743,15 @@ with tab_signal:
                 x='shared'
             )
 
-            # Check if mobile device - skip chart rendering for performance
-            mobile_device = False
-            if 'HTTP_USER_AGENT' in st.context.headers:
-                user_agent = st.context.headers['HTTP_USER_AGENT'].lower()
-                mobile_device = any(x in user_agent for x in [
-                                    'mobile', 'android', 'iphone', 'ipad'])
+            # Mobile mode: Use query param or toggle to disable charts
+            # On mobile, add ?mobile=true to URL or use the toggle below
+            show_charts = st.checkbox("📊 Show Charts", value=True,
+                                      help="Uncheck on mobile devices for faster performance")
 
-            if mobile_device:
-                st.info(
-                    "📱 **Mobile Mode**: Chart rendering disabled for faster performance. Use desktop to view interactive charts.")
-            else:
+            if show_charts:
                 st.altair_chart(combined_chart, use_container_width=True)
+            else:
+                st.info("📱 Charts hidden for better performance on mobile devices")
 
             # Add caption
             st.write("")
