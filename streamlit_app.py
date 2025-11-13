@@ -143,18 +143,31 @@ st.markdown("""
         margin-bottom: 1rem;
     }
 </style>
+
+<script>
+// Detect mobile device and set query param
+(function() {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth <= 768;
+    const url = new URL(window.location);
+    const currentMobile = url.searchParams.get('_mobile');
+    
+    if (isMobile && currentMobile !== 'true') {
+        url.searchParams.set('_mobile', 'true');
+        window.location.replace(url.toString());
+    } else if (!isMobile && currentMobile === 'true') {
+        url.searchParams.delete('_mobile');
+        window.location.replace(url.toString());
+    }
+})();
+</script>
 """, unsafe_allow_html=True)
 
 st.title("Stock Scanner")
 
 # Detect mobile device
-
-
 def is_mobile():
-    """Detect if user is on mobile based on viewport width"""
-    # Use JavaScript to detect screen width
-    mobile_check = st.query_params.get('mobile', 'false')
-    return mobile_check == 'true'
+    """Detect if user is on mobile based on query param set by JavaScript"""
+    return st.query_params.get('_mobile', 'false') == 'true'
 
 
 # Auto-refresh every 30 seconds during market hours (60 seconds on mobile for better performance)
@@ -743,15 +756,12 @@ with tab_signal:
                 x='shared'
             )
 
-            # Mobile mode: Use query param or toggle to disable charts
-            # On mobile, add ?mobile=true to URL or use the toggle below
-            show_charts = st.checkbox("📊 Show Charts", value=True,
-                                      help="Uncheck on mobile devices for faster performance")
-
-            if show_charts:
-                st.altair_chart(combined_chart, use_container_width=True)
+            # Automatically hide charts on mobile for better performance
+            if is_mobile():
+                st.info("� **Mobile Mode Detected**: Charts hidden for faster performance")
+                st.caption("💡 Using desktop browser will show interactive charts")
             else:
-                st.info("📱 Charts hidden for better performance on mobile devices")
+                st.altair_chart(combined_chart, use_container_width=True)
 
             # Add caption
             st.write("")
