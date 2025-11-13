@@ -23,6 +23,104 @@ import os
 
 
 st.set_page_config(page_title="Stock Scanner", layout="wide")
+
+# Mobile-optimized CSS
+st.markdown("""
+<style>
+    /* Mobile optimization */
+    @media only screen and (max-width: 768px) {
+        /* Reduce padding on mobile */
+        .main .block-container {
+            padding-left: 1rem;
+            padding-right: 1rem;
+            padding-top: 1rem;
+            max-width: 100%;
+        }
+        
+        /* Make title smaller on mobile */
+        h1 {
+            font-size: 1.5rem !important;
+        }
+        
+        h2 {
+            font-size: 1.3rem !important;
+        }
+        
+        h3 {
+            font-size: 1.1rem !important;
+        }
+        
+        /* Make tables scrollable horizontally */
+        .dataframe {
+            font-size: 0.8rem;
+            overflow-x: auto;
+            display: block;
+        }
+        
+        /* Improve button sizing for mobile */
+        .stButton button {
+            width: 100%;
+            font-size: 0.9rem;
+        }
+        
+        /* Make metrics more compact */
+        [data-testid="stMetricValue"] {
+            font-size: 1.2rem;
+        }
+        
+        [data-testid="stMetricLabel"] {
+            font-size: 0.8rem;
+        }
+        
+        /* Reduce chart heights on mobile */
+        .vega-embed {
+            max-height: 300px;
+        }
+        
+        /* Make tabs scrollable */
+        .stTabs [data-baseweb="tab-list"] {
+            overflow-x: auto;
+            flex-wrap: nowrap;
+        }
+        
+        /* Compact expanders */
+        .streamlit-expanderHeader {
+            font-size: 0.9rem;
+        }
+        
+        /* Better input fields on mobile */
+        .stTextInput input, .stNumberInput input {
+            font-size: 16px !important; /* Prevents zoom on iOS */
+        }
+        
+        /* Stack columns vertically on mobile */
+        [data-testid="column"] {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+        }
+    }
+    
+    /* Tablet optimization */
+    @media only screen and (min-width: 769px) and (max-width: 1024px) {
+        .main .block-container {
+            padding-left: 2rem;
+            padding-right: 2rem;
+        }
+    }
+    
+    /* General improvements for all screen sizes */
+    /* Better scrolling on tables */
+    .dataframe-container {
+        overflow-x: auto;
+    }
+    
+    /* Ensure charts are responsive */
+    .vega-embed {
+        width: 100% !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("Stock Scanner")
 
 # Auto-refresh every 30 seconds during market hours

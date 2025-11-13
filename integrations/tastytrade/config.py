@@ -114,7 +114,8 @@ def get_oauth_settings() -> Tuple[str, str, str, str, str]:
     if not client_id or not client_secret or not redirect_uri:
         print("❌ Missing required environment variables")
         if not use_production:
-            print("   Need: SANDBOX_TASTYTRADE_CLIENT_ID, SANDBOX_TASTYTRADE_CLIENT_SECRET")
+            print(
+                "   Need: SANDBOX_TASTYTRADE_CLIENT_ID, SANDBOX_TASTYTRADE_CLIENT_SECRET")
         else:
             print(
                 "   Need: TASTYTRADE_CLIENT_ID, TASTYTRADE_CLIENT_SECRET")
