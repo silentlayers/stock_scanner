@@ -79,19 +79,12 @@ def authenticate_cloud() -> Optional[Tuple[requests.Session, dict]]:
             authorization_base_url)
 
         st.warning("🔐 Authorization Required")
-        st.info("""
-        Click the button below to authorize this app with TastyTrade.
-        You'll be redirected back here after authorization.
-        """)
 
         # Show authorization button
         st.link_button(
             "🔓 Authorize with TastyTrade",
             authorization_url,
-            help="Opens TastyTrade authorization page in a new tab"
+            help="Opens TastyTrade authorization page"
         )
-
-        st.caption(
-            "After authorizing, you'll be redirected back to this app automatically.")
 
         return None
