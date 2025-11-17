@@ -778,65 +778,100 @@ with tab_signal:
 with tab_spreads:
     st.subheader("Options Spreads from Tastytrade")
 
-    # Automated Signal Detection Section
+    # Single Authorize Trade Button
     st.write("---")
-    st.subheader("🤖 Automated Signal Detection")
 
-    # Initialize automation engine in session state
-    if 'automation_engine' not in st.session_state:
-        st.session_state.automation_engine = AutomationEngine(
-            rsi_threshold=55.0,
-            vix_threshold=20.0,
-            execution_window=("10:30", "10:45"),
-            check_interval_seconds=300
-        )
+    ok = ensure_session()
+    if not ok:
+        st.info("👆 Please authorize with Tastytrade to continue.")
+    else:
+        # Initialize automation engine in session state
+        if 'automation_engine' not in st.session_state:
+            st.session_state.automation_engine = AutomationEngine(
+                rsi_threshold=55.0,
+                vix_threshold=20.0,
+                execution_window=("10:30", "10:45"),
+                check_interval_seconds=300
+            )
 
-    auto_engine = st.session_state.automation_engine
+        auto_engine = st.session_state.automation_engine
 
-    # Display current configuration (read-only)
-    st.write("**Configuration:**")
-    config_cols = st.columns(4)
-    config_cols[0].metric("RSI Threshold", "≥ 55")
-    config_cols[1].metric("VIX Threshold", "≤ 20")
-    config_cols[2].metric("Window Start", "10:30 AM ET")
-    config_cols[3].metric("Window End", "10:45 AM ET")
+        # Single Authorization Button
+        if st.button("🚀 Authorize Trade", use_container_width=True, type="primary"):
+            with st.spinner("Running pre-trade checks..."):
+                from integrations.tastytrade.account import get_account_numbers
+                from core.position_manager import get_positions_summary
 
-    # Check Signal Now button
-    if st.button("🔍 Check Signal Now", use_container_width=True):
-        with st.spinner("Checking market conditions..."):
-            ready_to_trade, conditions = auto_engine.check_and_log_conditions()
+                # 1. Check Signal
+                st.write("### 🔍 Checking Market Signal...")
+                ready_to_trade, conditions = auto_engine.check_and_log_conditions()
 
-            # Display results
-            if ready_to_trade:
-                st.success("✅ **SIGNAL CONFIRMED** - Ready to execute trade!")
-            else:
-                st.info(f"⏳ {conditions.get('reason', 'Waiting for signal')}")
+                # Display signal status
+                cond_cols = st.columns(4)
+                cond_cols[0].metric("RSI", f"{conditions.get('rsi', 0):.2f}",
+                                    "✅" if conditions.get('rsi', 0) >= 55 else "❌")
+                cond_cols[1].metric("VIX", f"{conditions.get('vix', 0):.2f}",
+                                    "✅" if conditions.get('vix', 0) <= 20 else "❌")
+                cond_cols[2].metric("Market Hours",
+                                    "✅ Open" if conditions.get('can_trade_now') else "❌ Closed")
+                cond_cols[3].metric("Window",
+                                    "✅" if conditions.get('can_trade_now') else "⏳")
 
-            # Show detailed conditions
-            cond_cols = st.columns(4)
-            cond_cols[0].metric("RSI", f"{conditions.get('rsi', 0):.2f}",
-                                f"Target: ≥55")
-            cond_cols[1].metric("VIX", f"{conditions.get('vix', 0):.2f}",
-                                f"Target: ≤20")
-            cond_cols[2].metric("Market Hours",
-                                "✅ Open" if conditions.get('can_trade_now') else "❌ Closed")
-            cond_cols[3].metric("Execution Window",
-                                "✅ Active" if conditions.get('can_trade_now') else "⏳ Waiting")
+                if ready_to_trade:
+                    st.success(
+                        "✅ **SIGNAL CONFIRMED** - Market conditions met!")
+                else:
+                    st.warning(
+                        f"⚠️ {conditions.get('reason', 'Signal not ready')}")
 
-            # Show schedule reason
-            if not conditions.get('can_trade_now'):
-                st.caption(f"📅 {conditions.get('schedule_reason', '')}")
+                # 2. Check DTE 21 Positions
+                st.write("### 📊 Checking Positions at DTE ≤ 21...")
+                try:
+                    session = st.session_state['auth_session']
+                    accounts = get_account_numbers(session)
 
-    # Show last check status
-    if auto_engine.last_check_time:
-        st.caption(
-            f"🕐 Last checked: {auto_engine.last_check_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                    if accounts:
+                        account = accounts[0]  # Use first account
+                        summary = get_positions_summary(
+                            session, account, 'SPY')
 
-        if auto_engine.last_signal_conditions:
-            with st.expander("📊 Last Signal Details", expanded=False):
-                st.json(auto_engine.last_signal_conditions)
+                        if summary:
+                            positions_at_21 = [
+                                p for p in summary if p['dte'] <= 21]
 
-    st.write("---")
+                            if positions_at_21:
+                                st.warning(
+                                    f"⚠️ **{len(positions_at_21)} position(s) at/below 21 DTE**")
+
+                                # Show positions
+                                import pandas as pd
+                                df = pd.DataFrame(positions_at_21)
+                                st.dataframe(
+                                    df[['symbol', 'dte', 'expiration',
+                                        'strike', 'option_type', 'quantity']],
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
+                            else:
+                                st.success(
+                                    "✅ **No positions at/below 21 DTE**")
+                        else:
+                            st.info("ℹ️ No SPY positions found")
+                    else:
+                        st.error("No accounts found")
+
+                except Exception as e:
+                    st.error(f"Error checking positions: {e}")
+
+                # 3. Final Authorization Status
+                st.write("---")
+                if ready_to_trade:
+                    st.success(
+                        "### ✅ TRADE AUTHORIZED - Proceed with spread execution below")
+                else:
+                    st.info("### ⏳ Trade not authorized - Check conditions above")
+
+        st.write("---")
 
     # TODO: Fetch live account balance when automating
     # Example API call: account_balance = get_account_balance(session)
@@ -2037,142 +2072,6 @@ with tab_spreads:
 
     else:
         st.info("👆 Please authorize with Tastytrade above to view options data.")
-
-    # Position Management Section
-    st.write("---")
-    st.subheader("📊 Position Manager - Auto-Close at 21 DTE")
-
-    ok = ensure_session()
-    if not ok:
-        st.info("👆 Please authorize with Tastytrade to manage positions.")
-    else:
-        from integrations.tastytrade.account import get_account_numbers
-        from core.position_manager import (
-            get_positions_summary,
-            monitor_and_close_positions
-        )
-
-        try:
-            session = st.session_state['auth_session']
-            accounts = get_account_numbers(session)
-
-            if not accounts:
-                st.error("No accounts found")
-            else:
-                account = st.selectbox(
-                    "Account", accounts, key="position_account")
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    dte_threshold = st.number_input(
-                        "Close at DTE",
-                        min_value=1,
-                        max_value=45,
-                        value=21,
-                        help="Auto-close positions when they reach this DTE"
-                    )
-
-                with col2:
-                    auto_close_enabled = st.toggle(
-                        "Enable Auto-Close",
-                        value=False,
-                        help="Automatically close positions at DTE threshold"
-                    )
-
-                st.write("---")
-
-                # Get positions
-                summary = get_positions_summary(session, account, 'SPY')
-
-                if summary:
-                    st.write(f"### Open Positions ({len(summary)})")
-
-                    # Convert to DataFrame
-                    df = pd.DataFrame(summary)
-                    df['status'] = df['dte'].apply(
-                        lambda x: '🔴 CLOSE' if x <= dte_threshold else '🟢 OK'
-                    )
-
-                    st.dataframe(
-                        df[['status', 'symbol', 'dte', 'expiration',
-                            'strike', 'option_type', 'direction', 'quantity']],
-                        use_container_width=True,
-                        hide_index=True
-                    )
-
-                    positions_to_close = [
-                        p for p in summary if p['dte'] <= dte_threshold]
-
-                    if positions_to_close:
-                        st.warning(
-                            f"⚠️ {len(positions_to_close)} position(s) at/below {dte_threshold} DTE")
-
-                        col1, col2 = st.columns(2)
-
-                        with col1:
-                            if st.button("👀 Preview Close Orders (Dry Run)", use_container_width=True):
-                                with st.spinner("Simulating close..."):
-                                    try:
-                                        results = monitor_and_close_positions(
-                                            session, account, dte_threshold, 'SPY', dry_run=True
-                                        )
-                                        if results:
-                                            st.success(
-                                                f"Would close {len(results)} spread(s)")
-                                            for r in results:
-                                                st.caption(
-                                                    f"• {r.get('short_leg', 'N/A')} / {r.get('long_leg', 'N/A')}")
-                                    except Exception as e:
-                                        st.error(f"Preview failed: {e}")
-
-                        with col2:
-                            if st.button("✅ Close All at Threshold", use_container_width=True, type="primary"):
-                                if st.session_state.get('confirm_close'):
-                                    with st.spinner("Closing positions..."):
-                                        try:
-                                            results = monitor_and_close_positions(
-                                                session, account, dte_threshold, 'SPY', dry_run=False
-                                            )
-                                            if results:
-                                                st.success(
-                                                    f"✅ Closed {len(results)} position(s)")
-                                                for r in results:
-                                                    if 'id' in r:
-                                                        st.caption(
-                                                            f"Order ID: {r['id']}")
-                                        except Exception as e:
-                                            st.error(f"Close failed: {e}")
-                                    st.session_state.confirm_close = False
-                                else:
-                                    st.session_state.confirm_close = True
-                                    st.warning("⚠️ Click again to confirm")
-                    else:
-                        st.success(
-                            f"✅ All positions have > {dte_threshold} DTE")
-
-                    # Auto-close execution
-                    if auto_close_enabled and positions_to_close:
-                        if 'last_auto_close_check' not in st.session_state:
-                            st.session_state.last_auto_close_check = dt.now()
-
-                            with st.spinner("Auto-closing positions..."):
-                                try:
-                                    results = monitor_and_close_positions(
-                                        session, account, dte_threshold, 'SPY', dry_run=False
-                                    )
-                                    if results:
-                                        st.success(
-                                            f"🤖 Auto-closed {len(results)} position(s)")
-                                except Exception as e:
-                                    st.error(f"Auto-close failed: {e}")
-                else:
-                    st.info("No SPY positions found")
-
-        except Exception as e:
-            st.error(f"Error: {e}")
-            import traceback
-            st.code(traceback.format_exc())
 
 with tab_backtest:
     st.subheader("Historical Backtest")
