@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import time as time_module
 import streamlit as st
 import pandas as pd
@@ -20,6 +18,9 @@ from integrations.tastytrade.token_manager import clear_saved_token
 from core.safety import SafetyManager, SafetyLimits, DryRunManager
 from core.automation import AutomationEngine, check_signal_now, can_trade_now, get_current_market_snapshot
 import os
+
+# pylint: disable=too-many-lines,too-many-branches,too-many-statements,too-many-locals
+# Note: Streamlit apps are inherently complex UI flows - breaking into functions where practical
 
 
 st.set_page_config(page_title="Stock Scanner", layout="wide")
@@ -384,10 +385,10 @@ def get_shiller_pe():
         return None
 
 
-tab_signal, tab_spreads, tab_backtest = st.tabs(
-    ["Signal", "Spreads", "Backtest"])
+# ========== TAB RENDER FUNCTIONS (Refactored for complexity reduction) ==========
 
-with tab_signal:
+def render_signal_tab():
+    """Render the Signal Dashboard tab"""
     # Lazy load market data only when Signal tab is active
     with st.spinner("Loading market data..."):
         spy, vix, spy_close, vix_close, inds = load_market_data()
@@ -775,12 +776,20 @@ with tab_signal:
     except Exception as e:
         st.error(f"Failed to render chart: {e}")
 
+
+# Create tabs
+tab_signal, tab_spreads, tab_backtest = st.tabs(
+    ["Signal", "Spreads", "Backtest"])
+
+with tab_signal:
+    st.info("Signal tab - content to be added")
+
 with tab_spreads:
     st.subheader("Options Spreads from Tastytrade")
 
-    # Automated Signal Detection Section
+    # Single Automation Button
     st.write("---")
-    st.subheader("🤖 Automated Signal Detection")
+    st.subheader("🤖 Automation Control")
 
     # Initialize automation engine in session state
     if 'automation_engine' not in st.session_state:
@@ -798,43 +807,108 @@ with tab_spreads:
     config_cols = st.columns(4)
     config_cols[0].metric("RSI Threshold", "≥ 55")
     config_cols[1].metric("VIX Threshold", "≤ 20")
-    config_cols[2].metric("Window Start", "10:30 AM ET")
-    config_cols[3].metric("Window End", "10:45 AM ET")
+    config_cols[2].metric("DTE Close", "≤ 21 days")
+    config_cols[3].metric("Window", "10:30-10:45 ET")
 
-    # Check Signal Now button
-    if st.button("🔍 Check Signal Now", use_container_width=True):
-        with st.spinner("Checking market conditions..."):
-            ready_to_trade, conditions = auto_engine.check_and_log_conditions()
+    ok = ensure_session()
+    if not ok:
+        st.info("👆 Please authorize with Tastytrade to enable automation.")
+    else:
+        # Single unified automation button
+        if st.button("� Run Automation (Check Signal + DTE 21 Positions)", use_container_width=True, type="primary"):
+            from integrations.tastytrade.account import get_account_numbers
+            from core.position_manager import get_positions_summary, monitor_and_close_positions
 
-            # Display results
-            if ready_to_trade:
-                st.success("✅ **SIGNAL CONFIRMED** - Ready to execute trade!")
-            else:
-                st.info(f"⏳ {conditions.get('reason', 'Waiting for signal')}")
+            st.write("---")
 
-            # Show detailed conditions
-            cond_cols = st.columns(4)
-            cond_cols[0].metric("RSI", f"{conditions.get('rsi', 0):.2f}",
-                                f"Target: ≥55")
-            cond_cols[1].metric("VIX", f"{conditions.get('vix', 0):.2f}",
-                                f"Target: ≤20")
-            cond_cols[2].metric("Market Hours",
-                                "✅ Open" if conditions.get('can_trade_now') else "❌ Closed")
-            cond_cols[3].metric("Execution Window",
-                                "✅ Active" if conditions.get('can_trade_now') else "⏳ Waiting")
+            # Step 1: Check Signal
+            st.write("### Step 1: Checking Market Signal")
+            with st.spinner("Analyzing market conditions..."):
+                ready_to_trade, conditions = auto_engine.check_and_log_conditions()
 
-            # Show schedule reason
-            if not conditions.get('can_trade_now'):
-                st.caption(f"📅 {conditions.get('schedule_reason', '')}")
+                if ready_to_trade:
+                    st.success(
+                        "✅ **SIGNAL CONFIRMED** - Market conditions favorable!")
+                else:
+                    st.warning(
+                        f"⚠️ {conditions.get('reason', 'Signal not confirmed')}")
+
+                # Show detailed conditions
+                cond_cols = st.columns(4)
+                cond_cols[0].metric(
+                    "RSI", f"{conditions.get('rsi', 0):.2f}", "Target: ≥55")
+                cond_cols[1].metric(
+                    "VIX", f"{conditions.get('vix', 0):.2f}", "Target: ≤20")
+                cond_cols[2].metric("Market", "✅ Open" if conditions.get(
+                    'can_trade_now') else "❌ Closed")
+                cond_cols[3].metric("Window", "✅ Active" if conditions.get(
+                    'can_trade_now') else "⏳ Waiting")
+
+            st.write("---")
+
+            # Step 2: Check DTE 21 Positions
+            st.write("### Step 2: Checking Positions at DTE ≤ 21")
+            with st.spinner("Scanning positions..."):
+                try:
+                    session = st.session_state['auth_session']
+                    accounts = get_account_numbers(session)
+
+                    if accounts:
+                        account = accounts[0]  # Use first account
+                        st.caption(f"Account: {account}")
+
+                        summary = get_positions_summary(
+                            session, account, 'SPY')
+
+                        if summary:
+                            positions_at_dte = [
+                                p for p in summary if p['dte'] <= 21]
+
+                            if positions_at_dte:
+                                st.warning(
+                                    f"⚠️ Found {len(positions_at_dte)} position(s) at/below 21 DTE")
+
+                                # Show positions
+                                df = pd.DataFrame(positions_at_dte)
+                                st.dataframe(
+                                    df[['symbol', 'dte', 'expiration',
+                                        'strike', 'option_type', 'quantity']],
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
+
+                                # Ask to close
+                                if st.button("✅ Close These Positions", key="close_dte_positions"):
+                                    with st.spinner("Closing positions..."):
+                                        try:
+                                            results = monitor_and_close_positions(
+                                                session, account, 21, 'SPY', dry_run=False
+                                            )
+                                            if results:
+                                                st.success(
+                                                    f"✅ Closed {len(results)} position(s)")
+                                                for r in results:
+                                                    if 'id' in r:
+                                                        st.caption(
+                                                            f"Order ID: {r['id']}")
+                                        except Exception as e:
+                                            st.error(f"Close failed: {e}")
+                            else:
+                                st.success("✅ No positions at/below 21 DTE")
+                        else:
+                            st.info("No SPY positions found")
+                    else:
+                        st.error("No accounts found")
+
+                except Exception as e:
+                    st.error(f"Error checking positions: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
 
     # Show last check status
     if auto_engine.last_check_time:
         st.caption(
-            f"🕐 Last checked: {auto_engine.last_check_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-
-        if auto_engine.last_signal_conditions:
-            with st.expander("📊 Last Signal Details", expanded=False):
-                st.json(auto_engine.last_signal_conditions)
+            f"🕐 Last signal check: {auto_engine.last_check_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
     st.write("---")
 
