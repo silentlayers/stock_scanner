@@ -760,7 +760,6 @@ with tab_spreads:
     # Single authorization check for the entire tab
     ok = ensure_session()
     if not ok:
-        st.info("👆 Please authorize with Tastytrade to continue.")
         st.stop()  # Stop here if not authorized
 
     # Initialize automation engine in session state
