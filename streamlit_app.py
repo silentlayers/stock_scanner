@@ -218,25 +218,6 @@ def ensure_session():
         # Use cloud-friendly auth if on cloud, local auth otherwise
         on_cloud = is_running_on_cloud()
 
-        # Debug info - show environment variables
-        with st.expander("🔍 Debug: Environment Detection", expanded=False):
-            st.write("**Cloud Detection Result:**", on_cloud)
-            st.write("**Environment Variables:**")
-            st.json({
-                'STREAMLIT_SHARING_MODE': os.getenv('STREAMLIT_SHARING_MODE'),
-                'HOSTNAME': os.getenv('HOSTNAME'),
-                'IS_STREAMLIT_CLOUD': os.getenv('IS_STREAMLIT_CLOUD'),
-                'STREAMLIT_RUNTIME_ENVIRONMENT': os.getenv('STREAMLIT_RUNTIME_ENVIRONMENT'),
-                'FORCE_CLOUD_AUTH': os.getenv('FORCE_CLOUD_AUTH'),
-            })
-
-        # Debug info (can remove later)
-        if on_cloud:
-            st.caption("🌐 Detected: Streamlit Cloud - Using URL-based OAuth")
-        else:
-            st.caption(
-                "💻 Detected: Local environment - Using callback server OAuth")
-
         if on_cloud:
             from integrations.tastytrade.cloud_auth import authenticate_cloud
 
