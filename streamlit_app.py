@@ -755,7 +755,7 @@ with tab_signal:
         st.error(f"Failed to render chart: {e}")
 
 with tab_spreads:
-    st.subheader("Options Spreads from Tastytrade")
+    st.subheader("Options Spreads")
 
     # Single authorization check for the entire tab
     ok = ensure_session()
