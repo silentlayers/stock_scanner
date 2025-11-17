@@ -78,11 +78,9 @@ def authenticate_cloud() -> Optional[Tuple[requests.Session, dict]]:
         authorization_url, state = oauth.authorization_url(
             authorization_base_url)
 
-        st.warning("🔐 Authorization Required")
-
         # Show authorization button
         st.link_button(
-            "🔓 Authorize with TastyTrade",
+            "🔓 Authorize TastyTrade",
             authorization_url,
             help="Opens TastyTrade authorization page"
         )
