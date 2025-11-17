@@ -1400,10 +1400,6 @@ with tab_spreads:
                                 st.success(
                                     f"📋 Complex Order ID: **{result.get('id', 'N/A')}**")
 
-                                # Show order details
-                                with st.expander("📋 Full Order Details", expanded=True):
-                                    st.json(result)
-
                                 # Display order IDs for tracking
                                 if 'orders' in result:
                                     st.write("**Order Structure:**")
@@ -1464,22 +1460,8 @@ with tab_spreads:
                                     st.info(
                                         "💡 **Workaround:** Use the 'Submit Test Order' button below instead - it submits a simple opening order without the bracket.")
 
-                                with st.expander("📋 Full Error Details"):
-                                    import traceback
-                                    st.code(traceback.format_exc())
-
                 st.write("\n")
                 st.divider()
-
-                # Show last bracket order result if it exists
-                if 'last_bracket_result' in st.session_state:
-                    with st.expander("📋 Last Bracket Order Details (Persisted)", expanded=True):
-                        st.caption(
-                            "✅ This data persists across page refreshes")
-                        st.json(st.session_state['last_bracket_result'])
-                        if st.button("Clear", key="clear_last_bracket"):
-                            del st.session_state['last_bracket_result']
-                            st.rerun()
 
                 # Order Management Section
                 st.subheader("📋 Live Orders & Testing")
@@ -1539,14 +1521,6 @@ with tab_spreads:
                 with col_test2:
                     if st.button("🔄 Refresh Live Orders", key="refresh_orders_btn", use_container_width=True):
                         st.rerun()
-
-                # Show last submitted order result if it exists
-                if 'last_order_result' in st.session_state:
-                    with st.expander("📋 Last Submitted Order Details", expanded=True):
-                        st.json(st.session_state['last_order_result'])
-                        if st.button("Clear", key="clear_last_order"):
-                            del st.session_state['last_order_result']
-                            st.rerun()
 
                 st.write("\n")
 
@@ -1928,9 +1902,6 @@ with tab_spreads:
                                                 col3.metric(
                                                     "Avg Open", f"${avg_price:.2f}")
 
-                                                with st.expander("📋 Full Details"):
-                                                    st.json(pos)
-
                                 # Overall summary
                                 if spread_count > 0:
                                     st.write("---")
@@ -2048,9 +2019,6 @@ with tab_spreads:
                                         except Exception as e:
                                             st.error(
                                                 f"❌ OCO order failed: {e}")
-                                            with st.expander("📋 Error Details"):
-                                                import traceback
-                                                st.code(traceback.format_exc())
 
                 except Exception as e:
                     st.error(f"Error loading positions: {e}")
