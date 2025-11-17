@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import time as time_module
 import streamlit as st
 import pandas as pd
@@ -778,1268 +776,1264 @@ with tab_signal:
 with tab_spreads:
     st.subheader("Options Spreads from Tastytrade")
 
-    # Single Authorize Trade Button
-    st.write("---")
-
+    # Single authorization check for the entire tab
     ok = ensure_session()
     if not ok:
         st.info("👆 Please authorize with Tastytrade to continue.")
-    else:
-        # Initialize automation engine in session state
-        if 'automation_engine' not in st.session_state:
-            st.session_state.automation_engine = AutomationEngine(
-                rsi_threshold=55.0,
-                vix_threshold=20.0,
-                execution_window=("10:30", "10:45"),
-                check_interval_seconds=300
-            )
+        st.stop()  # Stop here if not authorized
 
-        auto_engine = st.session_state.automation_engine
+    # Initialize automation engine in session state
+    if 'automation_engine' not in st.session_state:
+        st.session_state.automation_engine = AutomationEngine(
+            rsi_threshold=55.0,
+            vix_threshold=20.0,
+            execution_window=("10:30", "10:45"),
+            check_interval_seconds=300
+        )
 
-        # Single Authorization Button
-        if st.button("🚀 Authorize Trade", use_container_width=True, type="primary"):
-            with st.spinner("Running pre-trade checks..."):
-                from integrations.tastytrade.account import get_account_numbers
-                from core.position_manager import get_positions_summary
+    auto_engine = st.session_state.automation_engine
 
-                # 1. Check Signal
-                st.write("### 🔍 Checking Market Signal...")
-                ready_to_trade, conditions = auto_engine.check_and_log_conditions()
+    # Single Authorization Button
+    st.write("---")
+    if st.button("🚀 Authorize Trade", use_container_width=True, type="primary"):
+        with st.spinner("Running pre-trade checks..."):
+            from integrations.tastytrade.account import get_account_numbers
+            from core.position_manager import get_positions_summary
 
-                # Display signal status
-                cond_cols = st.columns(4)
-                cond_cols[0].metric("RSI", f"{conditions.get('rsi', 0):.2f}",
-                                    "✅" if conditions.get('rsi', 0) >= 55 else "❌")
-                cond_cols[1].metric("VIX", f"{conditions.get('vix', 0):.2f}",
-                                    "✅" if conditions.get('vix', 0) <= 20 else "❌")
-                cond_cols[2].metric("Market Hours",
-                                    "✅ Open" if conditions.get('can_trade_now') else "❌ Closed")
-                cond_cols[3].metric("Window",
-                                    "✅" if conditions.get('can_trade_now') else "⏳")
+            # 1. Check Signal
+            st.write("### 🔍 Checking Market Signal...")
+            ready_to_trade, conditions = auto_engine.check_and_log_conditions()
 
-                if ready_to_trade:
-                    st.success(
-                        "✅ **SIGNAL CONFIRMED** - Market conditions met!")
-                else:
-                    st.warning(
-                        f"⚠️ {conditions.get('reason', 'Signal not ready')}")
+            # Display signal status
+            cond_cols = st.columns(4)
+            cond_cols[0].metric("RSI", f"{conditions.get('rsi', 0):.2f}",
+                                "✅" if conditions.get('rsi', 0) >= 55 else "❌")
+            cond_cols[1].metric("VIX", f"{conditions.get('vix', 0):.2f}",
+                                "✅" if conditions.get('vix', 0) <= 20 else "❌")
+            cond_cols[2].metric("Market Hours",
+                                "✅ Open" if conditions.get('can_trade_now') else "❌ Closed")
+            cond_cols[3].metric("Window",
+                                "✅" if conditions.get('can_trade_now') else "⏳")
 
-                # 2. Check DTE 21 Positions
-                st.write("### 📊 Checking Positions at DTE ≤ 21...")
-                try:
-                    session = st.session_state['auth_session']
-                    accounts = get_account_numbers(session)
+            if ready_to_trade:
+                st.success(
+                    "✅ **SIGNAL CONFIRMED** - Market conditions met!")
+            else:
+                st.warning(
+                    f"⚠️ {conditions.get('reason', 'Signal not ready')}")
 
-                    if accounts:
-                        account = accounts[0]  # Use first account
-                        summary = get_positions_summary(
-                            session, account, 'SPY')
+            # 2. Check DTE 21 Positions
+            st.write("### 📊 Checking Positions at DTE ≤ 21...")
+            try:
+                session = st.session_state['auth_session']
+                accounts = get_account_numbers(session)
 
-                        if summary:
-                            positions_at_21 = [
-                                p for p in summary if p['dte'] <= 21]
+                if accounts:
+                    account = accounts[0]  # Use first account
+                    summary = get_positions_summary(
+                        session, account, 'SPY')
 
-                            if positions_at_21:
-                                st.warning(
-                                    f"⚠️ **{len(positions_at_21)} position(s) at/below 21 DTE**")
+                    if summary:
+                        positions_at_21 = [
+                            p for p in summary if p['dte'] <= 21]
 
-                                # Show positions
-                                import pandas as pd
-                                df = pd.DataFrame(positions_at_21)
-                                st.dataframe(
-                                    df[['symbol', 'dte', 'expiration',
-                                        'strike', 'option_type', 'quantity']],
-                                    use_container_width=True,
-                                    hide_index=True
-                                )
-                            else:
-                                st.success(
-                                    "✅ **No positions at/below 21 DTE**")
+                        if positions_at_21:
+                            st.warning(
+                                f"⚠️ **{len(positions_at_21)} position(s) at/below 21 DTE**")
+
+                            # Show positions
+                            import pandas as pd
+                            df = pd.DataFrame(positions_at_21)
+                            st.dataframe(
+                                df[['symbol', 'dte', 'expiration',
+                                    'strike', 'option_type', 'quantity']],
+                                use_container_width=True,
+                                hide_index=True
+                            )
                         else:
-                            st.info("ℹ️ No SPY positions found")
+                            st.success(
+                                "✅ **No positions at/below 21 DTE**")
                     else:
-                        st.error("No accounts found")
-
-                except Exception as e:
-                    st.error(f"Error checking positions: {e}")
-
-                # 3. Final Authorization Status
-                st.write("---")
-                if ready_to_trade:
-                    st.success(
-                        "### ✅ TRADE AUTHORIZED - Proceed with spread execution below")
+                        st.info("ℹ️ No SPY positions found")
                 else:
-                    st.info("### ⏳ Trade not authorized - Check conditions above")
+                    st.error("No accounts found")
 
-        st.write("---")
+            except Exception as e:
+                st.error(f"Error checking positions: {e}")
 
+            # 3. Final Authorization Status
+            st.write("---")
+            if ready_to_trade:
+                st.success(
+                    "### ✅ TRADE AUTHORIZED - Proceed with spread execution below")
+            else:
+                st.info("### ⏳ Trade not authorized - Check conditions above")
+
+    st.write("---")
+
+    # Fetch and display spread options
     # TODO: Fetch live account balance when automating
     # Example API call: account_balance = get_account_balance(session)
     # For now, position sizing uses hardcoded ACCOUNT_SIZE constant in the spread display section
 
-    ok = ensure_session()
-    if ok:
-        try:
-            with st.spinner("Fetching SPY options..."):
-                options_json = fetch_spy_options(
-                    st.session_state['auth_session'])
-        except Exception as e:
-            st.error(f"❌ Failed to fetch options data: {e}")
-            st.write("This could be due to:")
-            st.write("- API authentication issues")
-            st.write("- Network connectivity problems")
-            st.write("- Tastytrade API being unavailable")
-            st.write("Try re-authorizing or check your connection.")
-        else:
-            meta = options_json.get('meta', {}) if isinstance(
-                options_json, dict) else {}
-            if meta:
-                st.caption(f"Source: {meta.get('source')}")
+    try:
+        with st.spinner("Fetching SPY options..."):
+            options_json = fetch_spy_options(
+                st.session_state['auth_session'])
+    except Exception as e:
+        st.error(f"❌ Failed to fetch options data: {e}")
+        st.write("This could be due to:")
+        st.write("- API authentication issues")
+        st.write("- Network connectivity problems")
+        st.write("- Tastytrade API being unavailable")
+        st.write("Try re-authorizing or check your connection.")
+    else:
+        meta = options_json.get('meta', {}) if isinstance(
+            options_json, dict) else {}
+        if meta:
+            st.caption(f"Source: {meta.get('source')}")
 
-            candidate = find_put_credit_spread(
-                options_json,
-                session=st.session_state['auth_session'],
-                dte_min=30,
-                dte_max=45,
-                sell_delta_target=0.50,
-                buy_delta_target=0.25
-            )
+        candidate = find_put_credit_spread(
+            options_json,
+            session=st.session_state['auth_session'],
+            dte_min=30,
+            dte_max=45,
+            sell_delta_target=0.50,
+            buy_delta_target=0.25
+        )
 
-            if candidate:
-                sell_leg, buy_leg, spread_width, credit, max_loss, avg_return_pct, dte = candidate
+        if candidate:
+            sell_leg, buy_leg, spread_width, credit, max_loss, avg_return_pct, dte = candidate
 
-                # Store spread details in session state for OCO orders
-                st.session_state['current_spread'] = {
-                    'sell_leg': sell_leg,
-                    'buy_leg': buy_leg,
-                    'credit': credit
-                }
+            # Store spread details in session state for OCO orders
+            st.session_state['current_spread'] = {
+                'sell_leg': sell_leg,
+                'buy_leg': buy_leg,
+                'credit': credit
+            }
 
-                # Display spread details in organized layout
-                st.success("✅ Found candidate put credit spread")
-                st.caption(
-                    "🎯 Optimized strategy: Collect credit with defined max risk")
+            # Display spread details in organized layout
+            st.success("✅ Found candidate put credit spread")
+            st.caption(
+                "🎯 Optimized strategy: Collect credit with defined max risk")
 
-                # Main spread metrics
-                met_cols = st.columns(4)
-                met_cols[0].metric("Credit Received", f"${credit:.2f}")
-                met_cols[1].metric("Max Risk", f"${max_loss:.2f}")
-                met_cols[2].metric("Return on Risk %", f"{avg_return_pct:.1f}%",
-                                   "✅ Excellent" if avg_return_pct >= 20 else "⚠️ Low")
-                met_cols[3].metric("DTE", f"{dte} days")
+            # Main spread metrics
+            met_cols = st.columns(4)
+            met_cols[0].metric("Credit Received", f"${credit:.2f}")
+            met_cols[1].metric("Max Risk", f"${max_loss:.2f}")
+            met_cols[2].metric("Return on Risk %", f"{avg_return_pct:.1f}%",
+                               "✅ Excellent" if avg_return_pct >= 20 else "⚠️ Low")
+            met_cols[3].metric("DTE", f"{dte} days")
 
-                st.write("#### Spread Details")
+            st.write("#### Spread Details")
 
-                # Sell leg (short put)
-                st.write("**📤 SELL (Short Put)**")
-                sell_cols = st.columns(4)
-                sell_cols[0].write(
-                    f"Strike: **${sell_leg.get('strike-price', 'N/A')}**")
-                sell_cols[1].write(
-                    f"Exp: **{sell_leg.get('expiration-date', 'N/A')}**")
-                # Delta (safe formatting)
-                _sd = sell_leg.get('delta')
-                try:
-                    _sd_str = f"{float(_sd):.3f}" if _sd is not None else "N/A"
-                except Exception:
-                    _sd_str = "N/A"
-                sell_cols[2].write(f"Delta: **{_sd_str}**")
-                # Show mid price (average of bid and ask)
-                _sell_bid = sell_leg.get('bid')
-                _sell_ask = sell_leg.get('ask')
-                try:
-                    if _sell_bid is not None and _sell_ask is not None:
-                        _sell_mid = (float(_sell_bid) + float(_sell_ask)) / 2.0
-                        sell_cols[3].write(f"Mid: **${_sell_mid:.2f}**")
-                    else:
-                        sell_cols[3].write(f"Mid: **N/A**")
-                except Exception:
+            # Sell leg (short put)
+            st.write("**📤 SELL (Short Put)**")
+            sell_cols = st.columns(4)
+            sell_cols[0].write(
+                f"Strike: **${sell_leg.get('strike-price', 'N/A')}**")
+            sell_cols[1].write(
+                f"Exp: **{sell_leg.get('expiration-date', 'N/A')}**")
+            # Delta (safe formatting)
+            _sd = sell_leg.get('delta')
+            try:
+                _sd_str = f"{float(_sd):.3f}" if _sd is not None else "N/A"
+            except Exception:
+                _sd_str = "N/A"
+            sell_cols[2].write(f"Delta: **{_sd_str}**")
+            # Show mid price (average of bid and ask)
+            _sell_bid = sell_leg.get('bid')
+            _sell_ask = sell_leg.get('ask')
+            try:
+                if _sell_bid is not None and _sell_ask is not None:
+                    _sell_mid = (float(_sell_bid) + float(_sell_ask)) / 2.0
+                    sell_cols[3].write(f"Mid: **${_sell_mid:.2f}**")
+                else:
                     sell_cols[3].write(f"Mid: **N/A**")
+            except Exception:
+                sell_cols[3].write(f"Mid: **N/A**")
 
-                # Buy leg (long put)
-                st.write("**📥 BUY (Long Put)**")
-                buy_cols = st.columns(4)
-                buy_cols[0].write(
-                    f"Strike: **${buy_leg.get('strike-price', 'N/A')}**")
-                buy_cols[1].write(
-                    f"Exp: **{buy_leg.get('expiration-date', 'N/A')}**")
-                _bd = buy_leg.get('delta')
-                try:
-                    _bd_str = f"{float(_bd):.3f}" if _bd is not None else "N/A"
-                except Exception:
-                    _bd_str = "N/A"
-                buy_cols[2].write(f"Delta: **{_bd_str}**")
-                # Show mid price (average of bid and ask)
-                _buy_bid = buy_leg.get('bid')
-                _buy_ask = buy_leg.get('ask')
-                try:
-                    if _buy_bid is not None and _buy_ask is not None:
-                        _buy_mid = (float(_buy_bid) + float(_buy_ask)) / 2.0
-                        buy_cols[3].write(f"Mid: **${_buy_mid:.2f}**")
-                    else:
-                        buy_cols[3].write(f"Mid: **N/A**")
-                except Exception:
+            # Buy leg (long put)
+            st.write("**📥 BUY (Long Put)**")
+            buy_cols = st.columns(4)
+            buy_cols[0].write(
+                f"Strike: **${buy_leg.get('strike-price', 'N/A')}**")
+            buy_cols[1].write(
+                f"Exp: **{buy_leg.get('expiration-date', 'N/A')}**")
+            _bd = buy_leg.get('delta')
+            try:
+                _bd_str = f"{float(_bd):.3f}" if _bd is not None else "N/A"
+            except Exception:
+                _bd_str = "N/A"
+            buy_cols[2].write(f"Delta: **{_bd_str}**")
+            # Show mid price (average of bid and ask)
+            _buy_bid = buy_leg.get('bid')
+            _buy_ask = buy_leg.get('ask')
+            try:
+                if _buy_bid is not None and _buy_ask is not None:
+                    _buy_mid = (float(_buy_bid) + float(_buy_ask)) / 2.0
+                    buy_cols[3].write(f"Mid: **${_buy_mid:.2f}**")
+                else:
                     buy_cols[3].write(f"Mid: **N/A**")
+            except Exception:
+                buy_cols[3].write(f"Mid: **N/A**")
 
-                # Show Deltas
-                st.write("#### Deltas")
-                delta_cols = st.columns(2)
-                delta_cols[0].write(f"**Sell Put δ:** {_sd_str}")
-                delta_cols[1].write(f"**Buy Put δ:** {_bd_str}")
+            # Show Deltas
+            st.write("#### Deltas")
+            delta_cols = st.columns(2)
+            delta_cols[0].write(f"**Sell Put δ:** {_sd_str}")
+            delta_cols[1].write(f"**Buy Put δ:** {_bd_str}")
 
-                st.info("💡 Targets: Sell δ ≈ -0.50, Buy δ ≈ -0.25 | DTE 30-45 days")
+            st.info("💡 Targets: Sell δ ≈ -0.50, Buy δ ≈ -0.25 | DTE 30-45 days")
 
-                # Risk profile
-                st.write("#### Risk Profile")
-                risk_cols = st.columns(2)
-                risk_cols[0].write(f"**Spread Width:** ${spread_width:.2f}")
-                risk_cols[1].write(
-                    f"**Break-even:** ${sell_leg.get('strike-price', 0) - credit:.2f}")
+            # Risk profile
+            st.write("#### Risk Profile")
+            risk_cols = st.columns(2)
+            risk_cols[0].write(f"**Spread Width:** ${spread_width:.2f}")
+            risk_cols[1].write(
+                f"**Break-even:** ${sell_leg.get('strike-price', 0) - credit:.2f}")
 
-                # Fetch Live Account Balance
-                st.write("#### 💰 Account Balance")
-                try:
-                    from integrations.tastytrade.account import get_account_numbers, get_account_summary
-                    session = st.session_state.get('auth_session')
+            # Fetch Live Account Balance
+            st.write("#### 💰 Account Balance")
+            try:
+                from integrations.tastytrade.account import get_account_numbers, get_account_summary
+                session = st.session_state.get('auth_session')
 
-                    if session:
-                        account_numbers = get_account_numbers(session)
-                        if account_numbers:
-                            account_number = account_numbers[0]
-                            account_summary = get_account_summary(
-                                session, account_number)
+                if session:
+                    account_numbers = get_account_numbers(session)
+                    if account_numbers:
+                        account_number = account_numbers[0]
+                        account_summary = get_account_summary(
+                            session, account_number)
 
-                            ACCOUNT_SIZE = account_summary['net_liquidating_value']
+                        ACCOUNT_SIZE = account_summary['net_liquidating_value']
 
-                            # Display account info
-                            acc_cols = st.columns(4)
-                            acc_cols[0].metric(
-                                "Account", account_summary['account_number'])
-                            acc_cols[1].metric(
-                                "Net Liq Value", f"${ACCOUNT_SIZE:,.2f}")
-                            acc_cols[2].metric(
-                                "OPT BP (Options)", f"${account_summary['buying_power']:,.2f}")
-                            acc_cols[3].metric(
-                                "Open Positions", account_summary['open_positions_count'])
+                        # Display account info
+                        acc_cols = st.columns(4)
+                        acc_cols[0].metric(
+                            "Account", account_summary['account_number'])
+                        acc_cols[1].metric(
+                            "Net Liq Value", f"${ACCOUNT_SIZE:,.2f}")
+                        acc_cols[2].metric(
+                            "OPT BP (Options)", f"${account_summary['buying_power']:,.2f}")
+                        acc_cols[3].metric(
+                            "Open Positions", account_summary['open_positions_count'])
 
-                            # Check for zero or negative balance
-                            if ACCOUNT_SIZE <= 0:
-                                st.error(
-                                    f"⚠️ Account balance is ${ACCOUNT_SIZE:,.2f}. Cannot calculate position sizing or execute trades.")
-                                st.warning(
-                                    "💡 Please fund your account or switch to sandbox mode for testing.")
-                                st.stop()
-
-                            # Check for zero buying power
-                            if account_summary['buying_power'] <= 0:
-                                buying_power = account_summary['buying_power']
-                                st.error(
-                                    f"🚨 OPTIONS BUYING POWER IS ${buying_power:,.2f} - Cannot place trades!")
-                                st.stop()
-                            else:
-                                st.success(
-                                    f"✅ Using live account balance: ${ACCOUNT_SIZE:,.2f} | Options BP: ${account_summary['buying_power']:,.2f}")
-                        else:
-                            st.error("⚠️ No accounts found")
+                        # Check for zero or negative balance
+                        if ACCOUNT_SIZE <= 0:
+                            st.error(
+                                f"⚠️ Account balance is ${ACCOUNT_SIZE:,.2f}. Cannot calculate position sizing or execute trades.")
+                            st.warning(
+                                "💡 Please fund your account or switch to sandbox mode for testing.")
                             st.stop()
-                    else:
-                        st.error(
-                            "⚠️ Not authenticated - please authorize with TastyTrade")
-                        st.stop()
 
-                except Exception as e:
-                    st.error(f"❌ Failed to fetch account balance: {e}")
+                        # Check for zero buying power
+                        if account_summary['buying_power'] <= 0:
+                            buying_power = account_summary['buying_power']
+                            st.error(
+                                f"🚨 OPTIONS BUYING POWER IS ${buying_power:,.2f} - Cannot place trades!")
+                            st.stop()
+                        else:
+                            st.success(
+                                f"✅ Using live account balance: ${ACCOUNT_SIZE:,.2f} | Options BP: ${account_summary['buying_power']:,.2f}")
+                    else:
+                        st.error("⚠️ No accounts found")
+                        st.stop()
+                else:
+                    st.error(
+                        "⚠️ Not authenticated - please authorize with TastyTrade")
                     st.stop()
 
-                # Position Sizing Recommendations
-                RISK_PER_POSITION_PCT = 1.7  # Fixed rule: risk 1.7% per trade
-                MAX_PORTFOLIO_DEPLOYMENT_PCT = 10.0  # Fixed rule: max 10% total deployment
+            except Exception as e:
+                st.error(f"❌ Failed to fetch account balance: {e}")
+                st.stop()
 
-                # Execution Timing Rules for Automation
-                EXECUTION_TIME_ET = "10:30"  # Execute at 10:30 AM Eastern Time
-                EXECUTION_WINDOW_MINUTES = 15  # Execution window: 10:30-10:45 AM ET
-                # Rationale: Volatility settled, tight spreads, good liquidity, clear market direction
+            # Position Sizing Recommendations
+            RISK_PER_POSITION_PCT = 1.7  # Fixed rule: risk 1.7% per trade
+            MAX_PORTFOLIO_DEPLOYMENT_PCT = 10.0  # Fixed rule: max 10% total deployment
 
-                # Exit Strategy Rules for Automation
-                # Close at 50% profit (if sold $1.00, close at $0.50)
-                TAKE_PROFIT_PCT_OF_CREDIT = 0.5
-                # Close at 100% loss (if sold $1.00, close at $2.00)
-                STOP_LOSS_PCT_OF_CREDIT = 1.0
-                # Rationale: Capture majority of profit early, limit losses to 1:1 risk/reward
+            # Execution Timing Rules for Automation
+            EXECUTION_TIME_ET = "10:30"  # Execute at 10:30 AM Eastern Time
+            EXECUTION_WINDOW_MINUTES = 15  # Execution window: 10:30-10:45 AM ET
+            # Rationale: Volatility settled, tight spreads, good liquidity, clear market direction
 
-                st.write("#### 📊 Position Sizing (Auto-Calculated)")
+            # Exit Strategy Rules for Automation
+            # Close at 50% profit (if sold $1.00, close at $0.50)
+            TAKE_PROFIT_PCT_OF_CREDIT = 0.5
+            # Close at 100% loss (if sold $1.00, close at $2.00)
+            STOP_LOSS_PCT_OF_CREDIT = 1.0
+            # Rationale: Capture majority of profit early, limit losses to 1:1 risk/reward
 
-                # Calculate position size based on fixed rules
-                max_risk_per_trade = ACCOUNT_SIZE * \
-                    (RISK_PER_POSITION_PCT / 100.0)
+            st.write("#### 📊 Position Sizing (Auto-Calculated)")
 
-                # Calculate number of contracts based on risk
-                num_contracts = int(max_risk_per_trade /
-                                    max_loss) if max_loss > 0 else 1
-                num_contracts = max(1, num_contracts)  # At least 1 contract
+            # Calculate position size based on fixed rules
+            max_risk_per_trade = ACCOUNT_SIZE * \
+                (RISK_PER_POSITION_PCT / 100.0)
 
-                # Get the safety limit from the safety controls section
-                # We'll need to cap at max_position_size, but that's defined later
-                # So we'll use a default of 5 here and apply the actual limit later
-                safety_position_limit = 5  # Default, will be overridden by user setting below
+            # Calculate number of contracts based on risk
+            num_contracts = int(max_risk_per_trade /
+                                max_loss) if max_loss > 0 else 1
+            num_contracts = max(1, num_contracts)  # At least 1 contract
 
-                # Calculate actual capital deployed and risk
+            # Get the safety limit from the safety controls section
+            # We'll need to cap at max_position_size, but that's defined later
+            # So we'll use a default of 5 here and apply the actual limit later
+            safety_position_limit = 5  # Default, will be overridden by user setting below
+
+            # Calculate actual capital deployed and risk
+            actual_capital_at_risk = num_contracts * max_loss
+            actual_credit_received = num_contracts * credit
+            actual_return_if_win = actual_credit_received
+            actual_risk_pct = (actual_capital_at_risk /
+                               ACCOUNT_SIZE) * 100.0
+
+            # Show recommendations
+            size_cols = st.columns(4)
+            size_cols[0].metric(
+                "Recommended Contracts",
+                f"{num_contracts}",
+                help=f"Auto-calculated: ${max_risk_per_trade:.2f} max risk ÷ ${max_loss:.2f} per contract"
+            )
+            size_cols[1].metric(
+                "Total Capital at Risk",
+                f"${actual_capital_at_risk:.2f}",
+                help=f"{num_contracts} contracts × ${max_loss:.2f} max loss"
+            )
+            size_cols[2].metric(
+                "Total Credit Received",
+                f"${actual_credit_received:.2f}",
+                help=f"{num_contracts} contracts × ${credit:.2f} credit"
+            )
+            size_cols[3].metric(
+                "Account Risk %",
+                f"{actual_risk_pct:.2f}%",
+                help=f"${actual_capital_at_risk:.2f} ÷ ${ACCOUNT_SIZE:,.0f} account"
+            )
+
+            if actual_risk_pct <= RISK_PER_POSITION_PCT:
+                st.success(
+                    f"✅ Position fits within {RISK_PER_POSITION_PCT}% risk rule (using {actual_risk_pct:.2f}%)")
+            else:
+                st.warning(
+                    f"⚠️ Position risks {actual_risk_pct:.2f}% (target: {RISK_PER_POSITION_PCT}%). Reducing to 1 contract recommended.")
+
+            st.caption(f"🤖 **Auto-Trade Setup:** Sell {num_contracts} × ${sell_leg.get('strike-price', 0)} put, Buy {num_contracts} × ${buy_leg.get('strike-price', 0)} put → ${actual_credit_received:.2f} credit | Rules: {RISK_PER_POSITION_PCT}% risk per trade, {MAX_PORTFOLIO_DEPLOYMENT_PCT}% max total deployment")
+
+            # Manual contract override
+            st.write("\n")
+            st.write("**Override Position Size (Optional):**")
+            use_manual_contracts = st.checkbox(
+                "Manually set number of contracts",
+                value=False,
+                help="Override the auto-calculated position size"
+            )
+
+            if use_manual_contracts:
+                manual_contracts = st.number_input(
+                    "Number of Contracts",
+                    min_value=1,
+                    max_value=20,
+                    value=min(num_contracts, 5),
+                    step=1,
+                    help="Manually specify how many contracts to trade"
+                )
+                # Override the calculated value
+                num_contracts = manual_contracts
+
+                # Recalculate metrics with manual value
                 actual_capital_at_risk = num_contracts * max_loss
                 actual_credit_received = num_contracts * credit
-                actual_return_if_win = actual_credit_received
-                actual_risk_pct = (actual_capital_at_risk /
-                                   ACCOUNT_SIZE) * 100.0
+                actual_risk_pct = (
+                    actual_capital_at_risk / ACCOUNT_SIZE) * 100.0
 
-                # Show recommendations
-                size_cols = st.columns(4)
-                size_cols[0].metric(
-                    "Recommended Contracts",
-                    f"{num_contracts}",
-                    help=f"Auto-calculated: ${max_risk_per_trade:.2f} max risk ÷ ${max_loss:.2f} per contract"
-                )
-                size_cols[1].metric(
-                    "Total Capital at Risk",
-                    f"${actual_capital_at_risk:.2f}",
-                    help=f"{num_contracts} contracts × ${max_loss:.2f} max loss"
-                )
-                size_cols[2].metric(
-                    "Total Credit Received",
-                    f"${actual_credit_received:.2f}",
-                    help=f"{num_contracts} contracts × ${credit:.2f} credit"
-                )
-                size_cols[3].metric(
-                    "Account Risk %",
-                    f"{actual_risk_pct:.2f}%",
-                    help=f"${actual_capital_at_risk:.2f} ÷ ${ACCOUNT_SIZE:,.0f} account"
-                )
+                st.info(
+                    f"📝 Using manual override: {num_contracts} contracts = ${actual_capital_at_risk:.2f} at risk ({actual_risk_pct:.2f}%)")
 
-                if actual_risk_pct <= RISK_PER_POSITION_PCT:
-                    st.success(
-                        f"✅ Position fits within {RISK_PER_POSITION_PCT}% risk rule (using {actual_risk_pct:.2f}%)")
-                else:
-                    st.warning(
-                        f"⚠️ Position risks {actual_risk_pct:.2f}% (target: {RISK_PER_POSITION_PCT}%). Reducing to 1 contract recommended.")
+            st.write("\n")
+            st.subheader("📤 Execute Trade in Sandbox")
 
-                st.caption(f"🤖 **Auto-Trade Setup:** Sell {num_contracts} × ${sell_leg.get('strike-price', 0)} put, Buy {num_contracts} × ${buy_leg.get('strike-price', 0)} put → ${actual_credit_received:.2f} credit | Rules: {RISK_PER_POSITION_PCT}% risk per trade, {MAX_PORTFOLIO_DEPLOYMENT_PCT}% max total deployment")
-
-                # Manual contract override
-                st.write("\n")
-                st.write("**Override Position Size (Optional):**")
-                use_manual_contracts = st.checkbox(
-                    "Manually set number of contracts",
-                    value=False,
-                    help="Override the auto-calculated position size"
+            # Profit/Loss targets
+            exec_col1, exec_col2 = st.columns(2)
+            with exec_col1:
+                take_profit_pct = st.slider(
+                    "Take Profit %",
+                    min_value=25,
+                    max_value=75,
+                    value=50,
+                    step=5,
+                    help="Close position when profit reaches this % of max credit"
+                )
+            with exec_col2:
+                stop_loss_pct = st.slider(
+                    "Stop Loss %",
+                    min_value=50,
+                    max_value=200,
+                    value=100,
+                    step=10,
+                    help="Close position when loss reaches this % of max loss"
                 )
 
-                if use_manual_contracts:
-                    manual_contracts = st.number_input(
-                        "Number of Contracts",
-                        min_value=1,
-                        max_value=20,
-                        value=min(num_contracts, 5),
-                        step=1,
-                        help="Manually specify how many contracts to trade"
-                    )
-                    # Override the calculated value
-                    num_contracts = manual_contracts
+            # Show what the exit prices will be
+            take_profit_debit = credit * (1 - take_profit_pct / 100.0)
+            stop_loss_debit = credit * (1 + stop_loss_pct / 100.0)
 
-                    # Recalculate metrics with manual value
-                    actual_capital_at_risk = num_contracts * max_loss
-                    actual_credit_received = num_contracts * credit
-                    actual_risk_pct = (
-                        actual_capital_at_risk / ACCOUNT_SIZE) * 100.0
+            exit_info = st.columns(3)
+            exit_info[0].metric("Entry Credit", f"${credit:.2f}")
+            exit_info[1].metric(
+                "Take Profit At",
+                f"${take_profit_debit:.2f}",
+                help=f"Close when spread drops to ${take_profit_debit:.2f} ({take_profit_pct}% profit)"
+            )
+            exit_info[2].metric(
+                "Stop Loss At",
+                f"${stop_loss_debit:.2f}",
+                help=f"Close when spread rises to ${stop_loss_debit:.2f} ({stop_loss_pct}% loss)"
+            )
 
-                    st.info(
-                        f"📝 Using manual override: {num_contracts} contracts = ${actual_capital_at_risk:.2f} at risk ({actual_risk_pct:.2f}%)")
+            # Production Safety Controls
+            st.write("\n")
+            st.divider()
+            st.subheader("🛡️ Production Safety Controls")
 
-                st.write("\n")
-                st.subheader("📤 Execute Trade in Sandbox")
+            # Initialize safety manager based on environment
+            is_production = os.getenv(
+                'TASTYTRADE_USE_PRODUCTION', 'true').lower() in ('true', '1', 'yes')
 
-                # Profit/Loss targets
-                exec_col1, exec_col2 = st.columns(2)
-                with exec_col1:
-                    take_profit_pct = st.slider(
-                        "Take Profit %",
-                        min_value=25,
-                        max_value=75,
-                        value=50,
-                        step=5,
-                        help="Close position when profit reaches this % of max credit"
-                    )
-                with exec_col2:
-                    stop_loss_pct = st.slider(
-                        "Stop Loss %",
-                        min_value=50,
-                        max_value=200,
-                        value=100,
-                        step=10,
-                        help="Close position when loss reaches this % of max loss"
-                    )
+            if is_production:
+                st.warning("⚠️ **PRODUCTION MODE** - Real money at risk!")
+            else:
+                st.info("🧪 **SANDBOX MODE** - Safe testing environment")
 
-                # Show what the exit prices will be
-                take_profit_debit = credit * (1 - take_profit_pct / 100.0)
-                stop_loss_debit = credit * (1 + stop_loss_pct / 100.0)
+            # Calculate dynamic max position size based on account balance
+            # Rule: Allow enough contracts to deploy up to 10% of account
+            # Assuming average max loss of $100 per contract (conservative estimate)
+            avg_max_loss_per_contract = 100.0
+            max_deployment = ACCOUNT_SIZE * 0.10  # 10% of account
+            calculated_max_position = int(
+                max_deployment / avg_max_loss_per_contract)
+            calculated_max_position = max(
+                1, min(calculated_max_position, 20))  # Between 1-20
 
-                exit_info = st.columns(3)
-                exit_info[0].metric("Entry Credit", f"${credit:.2f}")
-                exit_info[1].metric(
-                    "Take Profit At",
-                    f"${take_profit_debit:.2f}",
-                    help=f"Close when spread drops to ${take_profit_debit:.2f} ({take_profit_pct}% profit)"
-                )
-                exit_info[2].metric(
-                    "Stop Loss At",
-                    f"${stop_loss_debit:.2f}",
-                    help=f"Close when spread rises to ${stop_loss_debit:.2f} ({stop_loss_pct}% loss)"
+            # Safety configuration
+            safety_col1, safety_col2, safety_col3 = st.columns(3)
+
+            with safety_col1:
+                max_position_size = st.number_input(
+                    "Max Position Size (contracts)",
+                    min_value=1,
+                    max_value=20,
+                    value=calculated_max_position,
+                    help=f"Maximum contracts per trade (auto-calculated: {calculated_max_position} based on ${ACCOUNT_SIZE:,.0f} account)"
                 )
 
-                # Production Safety Controls
-                st.write("\n")
-                st.divider()
-                st.subheader("🛡️ Production Safety Controls")
-
-                # Initialize safety manager based on environment
-                is_production = os.getenv(
-                    'TASTYTRADE_USE_PRODUCTION', 'true').lower() in ('true', '1', 'yes')
-
-                if is_production:
-                    st.warning("⚠️ **PRODUCTION MODE** - Real money at risk!")
-                else:
-                    st.info("🧪 **SANDBOX MODE** - Safe testing environment")
-
-                # Calculate dynamic max position size based on account balance
-                # Rule: Allow enough contracts to deploy up to 10% of account
-                # Assuming average max loss of $100 per contract (conservative estimate)
-                avg_max_loss_per_contract = 100.0
-                max_deployment = ACCOUNT_SIZE * 0.10  # 10% of account
-                calculated_max_position = int(
-                    max_deployment / avg_max_loss_per_contract)
-                calculated_max_position = max(
-                    1, min(calculated_max_position, 20))  # Between 1-20
-
-                # Safety configuration
-                safety_col1, safety_col2, safety_col3 = st.columns(3)
-
-                with safety_col1:
-                    max_position_size = st.number_input(
-                        "Max Position Size (contracts)",
-                        min_value=1,
-                        max_value=20,
-                        value=calculated_max_position,
-                        help=f"Maximum contracts per trade (auto-calculated: {calculated_max_position} based on ${ACCOUNT_SIZE:,.0f} account)"
-                    )
-
-                with safety_col2:
-                    max_daily_trades = st.number_input(
-                        "Max Daily Trades",
-                        min_value=1,
-                        max_value=10,
-                        value=3,
-                        help="Maximum trades per day"
-                    )
-
-                with safety_col3:
-                    dry_run_mode = st.checkbox(
-                        "🧪 Dry Run (Simulate Only)",
-                        value=not is_production,
-                        help="Simulate orders without placing them"
-                    )
-
-                # Initialize safety manager with custom limits
-                safety_limits = SafetyLimits(
-                    max_position_size=max_position_size,
-                    max_daily_trades=max_daily_trades,
-                    require_confirmation=is_production,
-                    dry_run_mode=dry_run_mode
+            with safety_col2:
+                max_daily_trades = st.number_input(
+                    "Max Daily Trades",
+                    min_value=1,
+                    max_value=10,
+                    value=3,
+                    help="Maximum trades per day"
                 )
-                safety_manager = SafetyManager(limits=safety_limits)
 
-                # Apply safety position limit to auto-calculated contracts
-                # Cap the recommended contracts at the max_position_size
-                if num_contracts > max_position_size:
-                    original_num_contracts = num_contracts
-                    num_contracts = max_position_size
-                    st.info(
-                        f"ℹ️ Auto-calculated {original_num_contracts} contracts, capped to safety limit of {max_position_size}")
+            with safety_col3:
+                dry_run_mode = st.checkbox(
+                    "🧪 Dry Run (Simulate Only)",
+                    value=not is_production,
+                    help="Simulate orders without placing them"
+                )
 
-                    # Recalculate metrics with capped value
-                    actual_capital_at_risk = num_contracts * max_loss
-                    actual_credit_received = num_contracts * credit
-                    actual_risk_pct = (
-                        actual_capital_at_risk / ACCOUNT_SIZE) * 100.0
+            # Initialize safety manager with custom limits
+            safety_limits = SafetyLimits(
+                max_position_size=max_position_size,
+                max_daily_trades=max_daily_trades,
+                require_confirmation=is_production,
+                dry_run_mode=dry_run_mode
+            )
+            safety_manager = SafetyManager(limits=safety_limits)
 
-                # Get current positions count (you'll implement this)
-                from integrations.tastytrade.account import get_account_numbers
-                try:
-                    session = st.session_state.get('auth_session')
-                    if session:
-                        account_numbers = get_account_numbers(session)
-                        if account_numbers:
-                            # TODO: Implement get_positions_count function
-                            current_positions = 0  # Placeholder
-                        else:
-                            current_positions = 0
+            # Apply safety position limit to auto-calculated contracts
+            # Cap the recommended contracts at the max_position_size
+            if num_contracts > max_position_size:
+                original_num_contracts = num_contracts
+                num_contracts = max_position_size
+                st.info(
+                    f"ℹ️ Auto-calculated {original_num_contracts} contracts, capped to safety limit of {max_position_size}")
+
+                # Recalculate metrics with capped value
+                actual_capital_at_risk = num_contracts * max_loss
+                actual_credit_received = num_contracts * credit
+                actual_risk_pct = (
+                    actual_capital_at_risk / ACCOUNT_SIZE) * 100.0
+
+            # Get current positions count (you'll implement this)
+            from integrations.tastytrade.account import get_account_numbers
+            try:
+                session = st.session_state.get('auth_session')
+                if session:
+                    account_numbers = get_account_numbers(session)
+                    if account_numbers:
+                        # TODO: Implement get_positions_count function
+                        current_positions = 0  # Placeholder
                     else:
                         current_positions = 0
-                except:
-                    current_positions = 0
-
-                # Validate trade
-                is_valid, violations = safety_manager.validate_trade(
-                    quantity=num_contracts,
-                    spread_price=credit,
-                    account_balance=ACCOUNT_SIZE,
-                    current_positions=current_positions,
-                    daily_trades_count=len(safety_manager.get_today_trades()),
-                    max_loss_per_contract=max_loss
-                )
-
-                # Display safety report
-                daily_stats = safety_manager.get_daily_stats()
-                safety_status_cols = st.columns(4)
-                safety_status_cols[0].metric(
-                    "Trades Today", f"{daily_stats['trades_count']}/{max_daily_trades}")
-                safety_status_cols[1].metric(
-                    "Open Positions", f"{current_positions}/5")
-                safety_status_cols[2].metric(
-                    "Position Size", f"{num_contracts} contracts")
-                safety_status_cols[3].metric(
-                    "Capital at Risk", f"${actual_capital_at_risk:,.2f}")
-
-                if not is_valid:
-                    st.error("❌ Trade BLOCKED by safety controls:")
-                    for violation in violations:
-                        st.warning(f"⚠️ {violation}")
                 else:
-                    st.success("✅ Trade passes all safety checks")
+                    current_positions = 0
+            except:
+                current_positions = 0
 
-                # Execute button - disabled if safety checks fail
-                button_disabled = not is_valid
-                button_label = "🧪 SIMULATE Trade (Dry Run)" if dry_run_mode else "🚀 Execute Trade with Bracket Order"
+            # Validate trade
+            is_valid, violations = safety_manager.validate_trade(
+                quantity=num_contracts,
+                spread_price=credit,
+                account_balance=ACCOUNT_SIZE,
+                current_positions=current_positions,
+                daily_trades_count=len(safety_manager.get_today_trades()),
+                max_loss_per_contract=max_loss
+            )
 
-                if st.button(button_label, type="primary", key="execute_bracket_btn", use_container_width=True, disabled=button_disabled):
+            # Display safety report
+            daily_stats = safety_manager.get_daily_stats()
+            safety_status_cols = st.columns(4)
+            safety_status_cols[0].metric(
+                "Trades Today", f"{daily_stats['trades_count']}/{max_daily_trades}")
+            safety_status_cols[1].metric(
+                "Open Positions", f"{current_positions}/5")
+            safety_status_cols[2].metric(
+                "Position Size", f"{num_contracts} contracts")
+            safety_status_cols[3].metric(
+                "Capital at Risk", f"${actual_capital_at_risk:,.2f}")
 
-                    # Handle dry run mode
-                    if dry_run_mode:
-                        st.info(
-                            "🧪 **DRY RUN MODE** - Simulating order without execution")
-                        dry_run_mgr = DryRunManager()
+            if not is_valid:
+                st.error("❌ Trade BLOCKED by safety controls:")
+                for violation in violations:
+                    st.warning(f"⚠️ {violation}")
+            else:
+                st.success("✅ Trade passes all safety checks")
 
-                        spread_details = {
-                            'symbol': 'SPY',
-                            'quantity': num_contracts,
-                            'spread_price': credit,
-                            'take_profit': take_profit_debit,
-                            'stop_loss': stop_loss_debit,
-                            'sell_strike': sell_leg.get('strike-price', 0),
-                            'buy_strike': buy_leg.get('strike-price', 0)
-                        }
+            # Execute button - disabled if safety checks fail
+            button_disabled = not is_valid
+            button_label = "🧪 SIMULATE Trade (Dry Run)" if dry_run_mode else "🚀 Execute Trade with Bracket Order"
 
-                        simulated_result = dry_run_mgr.simulate_otoco_order(
-                            spread_details, num_contracts)
+            if st.button(button_label, type="primary", key="execute_bracket_btn", use_container_width=True, disabled=button_disabled):
 
-                        st.success("✅ Order simulated successfully!")
-                        st.json(simulated_result)
+                # Handle dry run mode
+                if dry_run_mode:
+                    st.info(
+                        "🧪 **DRY RUN MODE** - Simulating order without execution")
+                    dry_run_mgr = DryRunManager()
 
-                        # Log the simulated trade
-                        safety_manager.log_trade(
-                            trade_type="PUT_CREDIT_SPREAD_OTOCO",
-                            spread_details=spread_details,
-                            order_result=simulated_result,
-                            account_balance=ACCOUNT_SIZE,
-                            dry_run=True
-                        )
+                    spread_details = {
+                        'symbol': 'SPY',
+                        'quantity': num_contracts,
+                        'spread_price': credit,
+                        'take_profit': take_profit_debit,
+                        'stop_loss': stop_loss_debit,
+                        'sell_strike': sell_leg.get('strike-price', 0),
+                        'buy_strike': buy_leg.get('strike-price', 0)
+                    }
 
-                        st.info(
-                            "💡 Enable real execution by unchecking 'Dry Run' mode")
-                        st.session_state['last_bracket_result'] = simulated_result
+                    simulated_result = dry_run_mgr.simulate_otoco_order(
+                        spread_details, num_contracts)
 
-                    else:
-                        # Real execution
-                        with st.spinner("Submitting bracket order..."):
-                            try:
-                                from integrations.tastytrade.orders import open_spread_with_bracket
-                                from integrations.tastytrade.account import get_account_numbers
+                    st.success("✅ Order simulated successfully!")
+                    st.json(simulated_result)
 
-                                # Get session from state
-                                session = st.session_state.get('auth_session')
-                                if not session:
-                                    st.error(
-                                        "❌ No active session. Please reauthorize.")
-                                    st.stop()
+                    # Log the simulated trade
+                    safety_manager.log_trade(
+                        trade_type="PUT_CREDIT_SPREAD_OTOCO",
+                        spread_details=spread_details,
+                        order_result=simulated_result,
+                        account_balance=ACCOUNT_SIZE,
+                        dry_run=True
+                    )
 
-                                # Get account number
-                                account_numbers = get_account_numbers(session)
-                                if not account_numbers:
-                                    st.error("❌ No accounts found")
-                                    st.stop()
+                    st.info(
+                        "💡 Enable real execution by unchecking 'Dry Run' mode")
+                    st.session_state['last_bracket_result'] = simulated_result
 
-                                account_number = account_numbers[0]
+                else:
+                    # Real execution
+                    with st.spinner("Submitting bracket order..."):
+                        try:
+                            from integrations.tastytrade.orders import open_spread_with_bracket
+                            from integrations.tastytrade.account import get_account_numbers
 
-                                # Submit the bracket order
-                                result = open_spread_with_bracket(
-                                    session=session,
-                                    account_number=account_number,
-                                    underlying="SPY",
-                                    sell_leg=sell_leg,
-                                    buy_leg=buy_leg,
-                                    num_contracts=num_contracts,
-                                    entry_credit=credit,
-                                    take_profit_pct=take_profit_pct / 100.0,
-                                    stop_loss_pct=stop_loss_pct / 100.0,
-                                    dry_run_first=True
-                                )
+                            # Get session from state
+                            session = st.session_state.get('auth_session')
+                            if not session:
+                                st.error(
+                                    "❌ No active session. Please reauthorize.")
+                                st.stop()
 
-                                # Store result in session state FIRST (before any displays)
-                                st.session_state['last_bracket_result'] = result
+                            # Get account number
+                            account_numbers = get_account_numbers(session)
+                            if not account_numbers:
+                                st.error("❌ No accounts found")
+                                st.stop()
 
-                                # Show prominent success message
-                                st.balloons()
-                                st.success(
-                                    f"✅ **BRACKET ORDER SUBMITTED SUCCESSFULLY!**")
-                                st.success(
-                                    f"📋 Complex Order ID: **{result.get('id', 'N/A')}**")
-
-                                # Display order IDs for tracking
-                                if 'orders' in result:
-                                    st.write("**Order Structure:**")
-                                    order_cols = st.columns(3)
-                                    orders = result['orders']
-                                    if len(orders) >= 1:
-                                        order_cols[0].info(
-                                            f"🎯 Trigger Order\n\nID: {orders[0].get('id', 'N/A')}")
-                                    if len(orders) >= 2:
-                                        order_cols[1].success(
-                                            f"� Take Profit\n\nID: {orders[1].get('id', 'N/A')}")
-                                    if len(orders) >= 3:
-                                        order_cols[2].error(
-                                            f"🛑 Stop Loss\n\nID: {orders[2].get('id', 'N/A')}")
-
-                                is_production = os.getenv(
-                                    'TASTYTRADE_USE_PRODUCTION', 'true').lower() in ('true', '1', 'yes')
-                                if not is_production:
-                                    st.write(
-                                        "**Reminder:** This is sandbox - orders use simulated fills:")
-                                    st.write("- Market orders fill at $1")
-                                    st.write(
-                                        "- Limit orders ≤ $3 fill immediately")
-                                    st.write("- Limit orders ≥ $3 stay Live")
-                                else:
-                                    st.warning(
-                                        "⚠️ **PRODUCTION ORDER PLACED** - Real money at risk!")
-
-                                # Log the real trade
-                                spread_details = {
-                                    'symbol': 'SPY',
-                                    'quantity': num_contracts,
-                                    'spread_price': credit,
-                                    'take_profit': take_profit_debit,
-                                    'stop_loss': stop_loss_debit,
-                                    'sell_strike': sell_leg.get('strike-price', 0),
-                                    'buy_strike': buy_leg.get('strike-price', 0)
-                                }
-                                safety_manager.log_trade(
-                                    trade_type="PUT_CREDIT_SPREAD_OTOCO",
-                                    spread_details=spread_details,
-                                    order_result=result,
-                                    account_balance=ACCOUNT_SIZE,
-                                    dry_run=False
-                                )
-
-                            except Exception as e:
-                                error_msg = str(e)
-
-                                # Show prominent error message
-                                st.error("# ❌ ORDER SUBMISSION FAILED")
-                                st.error(f"**Error:** {error_msg}")
-
-                                # Provide helpful context for OTOCO errors
-                                if "illegal_buy_and_sell_on_same_symbol" in error_msg or "preflight_check_failure" in error_msg:
-                                    st.warning(
-                                        "⚠️ **OTOCO Bracket Order Issue:** TastyTrade sandbox may not support OTOCO complex orders.")
-                                    st.info(
-                                        "💡 **Workaround:** Use the 'Submit Test Order' button below instead - it submits a simple opening order without the bracket.")
-
-                st.write("\n")
-                st.divider()
-
-                # Order Management Section
-                st.subheader("📋 Live Orders & Testing")
-
-                # Show last refresh time
-                import datetime as dt_module
-                current_time = dt_module.datetime.now().strftime("%H:%M:%S")
-                st.caption(f"🕐 Last refreshed: {current_time}")
-
-                st.write("**🧪 Sandbox Fill Testing:**")
-                st.caption(
-                    "Limit orders > $3 won't auto-fill in sandbox and will stay Live until manually filled or cancelled.")
-
-                col_test1, col_test2 = st.columns(2)
-
-                with col_test1:
-                    if st.button("🔬 Submit Test Order (≤ $3 for instant fill)", key="test_order_btn", use_container_width=True):
-                        with st.spinner("Submitting simple test order that will auto-fill..."):
-                            try:
-                                from integrations.tastytrade.orders import open_spread_simple
-                                from integrations.tastytrade.account import get_account_numbers
-
-                                session = st.session_state.get('auth_session')
-                                if session:
-                                    account_numbers = get_account_numbers(
-                                        session)
-                                    if account_numbers:
-                                        account_number = account_numbers[0]
-
-                                        # Submit simple order (no OCO) with reduced credit ≤ $3 for instant sandbox fill
-                                        test_credit = 2.99
-                                        result = open_spread_simple(
-                                            session=session,
-                                            account_number=account_number,
-                                            underlying="SPY",
-                                            sell_leg=sell_leg,
-                                            buy_leg=buy_leg,
-                                            num_contracts=1,  # Use 1 contract for testing
-                                            entry_credit=test_credit,
-                                            dry_run_first=False  # Skip dry run for test
-                                        )
-
-                                        st.success(
-                                            "✅ Test order submitted at $2.99 - should fill immediately!")
-                                        st.json(result)
-                                        st.info(
-                                            "💡 This is a simple order (no OCO). Once filled, click 'Refresh Live Orders' below to see the filled position.")
-
-                                        # Store result in session state so it persists
-                                        st.session_state['last_order_result'] = result
-
-                            except Exception as e:
-                                st.error(f"❌ Test order failed: {e}")
-                                import traceback
-                                st.code(traceback.format_exc())
-
-                with col_test2:
-                    if st.button("🔄 Refresh Live Orders", key="refresh_orders_btn", use_container_width=True):
-                        st.rerun()
-
-                st.write("\n")
-
-                try:
-                    from integrations.tastytrade.orders import get_live_orders
-                    from integrations.tastytrade.account import get_account_numbers
-
-                    session = st.session_state.get('auth_session')
-                    if session:
-                        account_numbers = get_account_numbers(session)
-                        if account_numbers:
                             account_number = account_numbers[0]
-                            live_orders = get_live_orders(
-                                session, account_number)
 
-                            if live_orders:
-                                # Group orders by complex-order-id
-                                complex_orders = {}
-                                simple_orders = []
+                            # Submit the bracket order
+                            result = open_spread_with_bracket(
+                                session=session,
+                                account_number=account_number,
+                                underlying="SPY",
+                                sell_leg=sell_leg,
+                                buy_leg=buy_leg,
+                                num_contracts=num_contracts,
+                                entry_credit=credit,
+                                take_profit_pct=take_profit_pct / 100.0,
+                                stop_loss_pct=stop_loss_pct / 100.0,
+                                dry_run_first=True
+                            )
 
-                                for order in live_orders:
-                                    complex_id = order.get('complex-order-id')
-                                    if complex_id:
-                                        if complex_id not in complex_orders:
-                                            complex_orders[complex_id] = {
-                                                'trigger': None,
-                                                'oco': [],
-                                                'type': None
-                                            }
+                            # Store result in session state FIRST (before any displays)
+                            st.session_state['last_bracket_result'] = result
 
-                                        tag = order.get(
-                                            'complex-order-tag', '')
-                                        if 'trigger' in tag.lower():
-                                            complex_orders[complex_id]['trigger'] = order
-                                            # Extract type from tag (e.g., "OTOCO::trigger-order" -> "OTOCO")
-                                            complex_orders[complex_id]['type'] = tag.split(
-                                                '::')[0] if '::' in tag else 'Complex'
-                                        else:
-                                            complex_orders[complex_id]['oco'].append(
-                                                order)
-                                    else:
-                                        simple_orders.append(order)
+                            # Show prominent success message
+                            st.balloons()
+                            st.success(
+                                f"✅ **BRACKET ORDER SUBMITTED SUCCESSFULLY!**")
+                            st.success(
+                                f"📋 Complex Order ID: **{result.get('id', 'N/A')}**")
 
-                                total_order_count = len(
-                                    complex_orders) + len(simple_orders)
+                            # Display order IDs for tracking
+                            if 'orders' in result:
+                                st.write("**Order Structure:**")
+                                order_cols = st.columns(3)
+                                orders = result['orders']
+                                if len(orders) >= 1:
+                                    order_cols[0].info(
+                                        f"🎯 Trigger Order\n\nID: {orders[0].get('id', 'N/A')}")
+                                if len(orders) >= 2:
+                                    order_cols[1].success(
+                                        f"� Take Profit\n\nID: {orders[1].get('id', 'N/A')}")
+                                if len(orders) >= 3:
+                                    order_cols[2].error(
+                                        f"🛑 Stop Loss\n\nID: {orders[2].get('id', 'N/A')}")
+
+                            is_production = os.getenv(
+                                'TASTYTRADE_USE_PRODUCTION', 'true').lower() in ('true', '1', 'yes')
+                            if not is_production:
                                 st.write(
-                                    f"**Found {total_order_count} order group(s):**")
+                                    "**Reminder:** This is sandbox - orders use simulated fills:")
+                                st.write("- Market orders fill at $1")
+                                st.write(
+                                    "- Limit orders ≤ $3 fill immediately")
+                                st.write("- Limit orders ≥ $3 stay Live")
+                            else:
+                                st.warning(
+                                    "⚠️ **PRODUCTION ORDER PLACED** - Real money at risk!")
 
-                                # Display complex orders (OTOCO, OCO, etc.)
-                                for complex_id, group in complex_orders.items():
-                                    order_type = group['type'] or 'Complex'
-                                    trigger = group['trigger']
-                                    oco_orders = group['oco']
+                            # Log the real trade
+                            spread_details = {
+                                'symbol': 'SPY',
+                                'quantity': num_contracts,
+                                'spread_price': credit,
+                                'take_profit': take_profit_debit,
+                                'stop_loss': stop_loss_debit,
+                                'sell_strike': sell_leg.get('strike-price', 0),
+                                'buy_strike': buy_leg.get('strike-price', 0)
+                            }
+                            safety_manager.log_trade(
+                                trade_type="PUT_CREDIT_SPREAD_OTOCO",
+                                spread_details=spread_details,
+                                order_result=result,
+                                account_balance=ACCOUNT_SIZE,
+                                dry_run=False
+                            )
 
-                                    if trigger:
-                                        trigger_status = trigger.get(
-                                            'status', 'Unknown')
-                                        trigger_price = trigger.get(
-                                            'price', 'N/A')
-                                        trigger_effect = trigger.get(
-                                            'price-effect', '')
+                        except Exception as e:
+                            error_msg = str(e)
 
-                                        with st.expander(f"🎯 {order_type} Bracket Order #{complex_id} - Trigger: {trigger_status}"):
-                                            st.write(
-                                                f"**📦 Complex Order Type:** {order_type}")
-                                            st.write(
-                                                f"**Complex Order ID:** {complex_id}")
-                                            st.divider()
+                            # Show prominent error message
+                            st.error("# ❌ ORDER SUBMISSION FAILED")
+                            st.error(f"**Error:** {error_msg}")
 
-                                            # Trigger order section
-                                            st.write(
-                                                "**1️⃣ TRIGGER ORDER (Entry)**")
-                                            col1, col2, col3 = st.columns(3)
-                                            col1.metric(
-                                                "Order ID", f"#{trigger.get('id')}")
-                                            col2.metric(
-                                                "Status", trigger_status)
-                                            col3.metric(
-                                                "Price", f"${trigger_price} {trigger_effect}")
+                            # Provide helpful context for OTOCO errors
+                            if "illegal_buy_and_sell_on_same_symbol" in error_msg or "preflight_check_failure" in error_msg:
+                                st.warning(
+                                    "⚠️ **OTOCO Bracket Order Issue:** TastyTrade sandbox may not support OTOCO complex orders.")
+                                st.info(
+                                    "💡 **Workaround:** Use the 'Submit Test Order' button below instead - it submits a simple opening order without the bracket.")
 
-                                            if trigger.get('legs'):
-                                                st.write("**Legs:**")
-                                                for i, leg in enumerate(trigger['legs']):
-                                                    st.write(
-                                                        f"  {i+1}. {leg.get('action')} {leg.get('quantity')}x {leg.get('symbol')}")
+            st.write("\n")
+            st.divider()
 
-                                            # OCO orders section
-                                            if oco_orders:
-                                                st.divider()
-                                                st.write(
-                                                    f"**2️⃣ OCO EXIT ORDERS** ({len(oco_orders)} orders - One Cancels Other)")
-                                                st.caption(
-                                                    "These activate when the trigger order fills. Whichever executes first will automatically cancel the other.")
+            # Order Management Section
+            st.subheader("📋 Live Orders & Testing")
 
-                                                for idx, oco_order in enumerate(oco_orders):
-                                                    oco_type = oco_order.get(
-                                                        'order-type', '')
-                                                    oco_status = oco_order.get(
-                                                        'status', 'Unknown')
-                                                    oco_price = oco_order.get(
-                                                        'price', 'N/A')
+            # Show last refresh time
+            import datetime as dt_module
+            current_time = dt_module.datetime.now().strftime("%H:%M:%S")
+            st.caption(f"🕐 Last refreshed: {current_time}")
 
-                                                    # Determine if it's take profit or stop loss based on order type
-                                                    if 'Stop' in oco_type:
-                                                        label = "🛑 Stop Loss"
-                                                    else:
-                                                        label = "💰 Take Profit"
+            st.write("**🧪 Sandbox Fill Testing:**")
+            st.caption(
+                "Limit orders > $3 won't auto-fill in sandbox and will stay Live until manually filled or cancelled.")
 
-                                                    st.write(
-                                                        f"\n**{label}** (Order #{oco_order.get('id')})")
-                                                    oco_cols = st.columns(3)
-                                                    oco_cols[0].write(
-                                                        f"Type: {oco_type}")
-                                                    oco_cols[1].write(
-                                                        f"Status: {oco_status}")
-                                                    oco_cols[2].write(
-                                                        f"Price: ${oco_price}")
+            col_test1, col_test2 = st.columns(2)
 
-                                                    if oco_order.get('stop-trigger'):
-                                                        st.write(
-                                                            f"Stop Trigger: ${oco_order.get('stop-trigger')}")
+            with col_test1:
+                if st.button("🔬 Submit Test Order (≤ $3 for instant fill)", key="test_order_btn", use_container_width=True):
+                    with st.spinner("Submitting simple test order that will auto-fill..."):
+                        try:
+                            from integrations.tastytrade.orders import open_spread_simple
+                            from integrations.tastytrade.account import get_account_numbers
 
-                                                    if oco_order.get('legs'):
-                                                        st.caption("Legs: " + ", ".join(
-                                                            [f"{leg.get('action')} {leg.get('quantity')}x" for leg in oco_order['legs']]))
+                            session = st.session_state.get('auth_session')
+                            if session:
+                                account_numbers = get_account_numbers(
+                                    session)
+                                if account_numbers:
+                                    account_number = account_numbers[0]
 
-                                            # Cancel button for entire complex order
-                                            st.divider()
-                                            if st.button(f"❌ Cancel Entire Bracket Order #{complex_id}", key=f"cancel_complex_{complex_id}", type="secondary"):
-                                                try:
-                                                    from integrations.tastytrade.orders import cancel_order
-                                                    cancelled_count = 0
+                                    # Submit simple order (no OCO) with reduced credit ≤ $3 for instant sandbox fill
+                                    test_credit = 2.99
+                                    result = open_spread_simple(
+                                        session=session,
+                                        account_number=account_number,
+                                        underlying="SPY",
+                                        sell_leg=sell_leg,
+                                        buy_leg=buy_leg,
+                                        num_contracts=1,  # Use 1 contract for testing
+                                        entry_credit=test_credit,
+                                        dry_run_first=False  # Skip dry run for test
+                                    )
 
-                                                    # Cancel trigger
-                                                    if trigger and trigger.get('id'):
-                                                        cancel_order(
-                                                            session, account_number, int(trigger.get('id')))
-                                                        cancelled_count += 1
+                                    st.success(
+                                        "✅ Test order submitted at $2.99 - should fill immediately!")
+                                    st.json(result)
+                                    st.info(
+                                        "💡 This is a simple order (no OCO). Once filled, click 'Refresh Live Orders' below to see the filled position.")
 
-                                                    # Cancel OCO orders
-                                                    for oco in oco_orders:
-                                                        if oco.get('id'):
-                                                            cancel_order(
-                                                                session, account_number, int(oco.get('id')))
-                                                            cancelled_count += 1
+                                    # Store result in session state so it persists
+                                    st.session_state['last_order_result'] = result
 
-                                                    st.success(
-                                                        f"✅ Cancelled {cancelled_count} orders in bracket #{complex_id}. Click 'Refresh' to update.")
-                                                except Exception as e:
-                                                    st.error(
-                                                        f"❌ Cancel failed: {e}")
+                        except Exception as e:
+                            st.error(f"❌ Test order failed: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
 
-                                # Display simple orders
-                                for order in simple_orders:
-                                    with st.expander(f"Order #{order.get('id')} - {order.get('status', 'Unknown')} - {order.get('order-type', '')}"):
+            with col_test2:
+                if st.button("🔄 Refresh Live Orders", key="refresh_orders_btn", use_container_width=True):
+                    st.rerun()
+
+            st.write("\n")
+
+            try:
+                from integrations.tastytrade.orders import get_live_orders
+                from integrations.tastytrade.account import get_account_numbers
+
+                session = st.session_state.get('auth_session')
+                if session:
+                    account_numbers = get_account_numbers(session)
+                    if account_numbers:
+                        account_number = account_numbers[0]
+                        live_orders = get_live_orders(
+                            session, account_number)
+
+                        if live_orders:
+                            # Group orders by complex-order-id
+                            complex_orders = {}
+                            simple_orders = []
+
+                            for order in live_orders:
+                                complex_id = order.get('complex-order-id')
+                                if complex_id:
+                                    if complex_id not in complex_orders:
+                                        complex_orders[complex_id] = {
+                                            'trigger': None,
+                                            'oco': [],
+                                            'type': None
+                                        }
+
+                                    tag = order.get(
+                                        'complex-order-tag', '')
+                                    if 'trigger' in tag.lower():
+                                        complex_orders[complex_id]['trigger'] = order
+                                        # Extract type from tag (e.g., "OTOCO::trigger-order" -> "OTOCO")
+                                        complex_orders[complex_id]['type'] = tag.split(
+                                            '::')[0] if '::' in tag else 'Complex'
+                                    else:
+                                        complex_orders[complex_id]['oco'].append(
+                                            order)
+                                else:
+                                    simple_orders.append(order)
+
+                            total_order_count = len(
+                                complex_orders) + len(simple_orders)
+                            st.write(
+                                f"**Found {total_order_count} order group(s):**")
+
+                            # Display complex orders (OTOCO, OCO, etc.)
+                            for complex_id, group in complex_orders.items():
+                                order_type = group['type'] or 'Complex'
+                                trigger = group['trigger']
+                                oco_orders = group['oco']
+
+                                if trigger:
+                                    trigger_status = trigger.get(
+                                        'status', 'Unknown')
+                                    trigger_price = trigger.get(
+                                        'price', 'N/A')
+                                    trigger_effect = trigger.get(
+                                        'price-effect', '')
+
+                                    with st.expander(f"🎯 {order_type} Bracket Order #{complex_id} - Trigger: {trigger_status}"):
+                                        st.write(
+                                            f"**📦 Complex Order Type:** {order_type}")
+                                        st.write(
+                                            f"**Complex Order ID:** {complex_id}")
+                                        st.divider()
+
+                                        # Trigger order section
+                                        st.write(
+                                            "**1️⃣ TRIGGER ORDER (Entry)**")
                                         col1, col2, col3 = st.columns(3)
+                                        col1.metric(
+                                            "Order ID", f"#{trigger.get('id')}")
+                                        col2.metric(
+                                            "Status", trigger_status)
+                                        col3.metric(
+                                            "Price", f"${trigger_price} {trigger_effect}")
 
-                                        col1.write(
-                                            f"**Status:** {order.get('status')}")
-                                        col2.write(
-                                            f"**Type:** {order.get('order-type')}")
-                                        col3.write(
-                                            f"**Size:** {order.get('size')}")
-
-                                        if order.get('price'):
-                                            st.write(
-                                                f"**Price:** ${order.get('price')} ({order.get('price-effect')})")
-
-                                        if order.get('underlying-symbol'):
-                                            st.write(
-                                                f"**Underlying:** {order.get('underlying-symbol')}")
-
-                                        # Show legs
-                                        if order.get('legs'):
+                                        if trigger.get('legs'):
                                             st.write("**Legs:**")
-                                            for i, leg in enumerate(order['legs']):
+                                            for i, leg in enumerate(trigger['legs']):
                                                 st.write(
                                                     f"  {i+1}. {leg.get('action')} {leg.get('quantity')}x {leg.get('symbol')}")
 
-                                        # Sandbox fill simulation button
-                                        if order.get('status') in ['Received', 'Live', 'Contingent']:
+                                        # OCO orders section
+                                        if oco_orders:
+                                            st.divider()
                                             st.write(
-                                                "\n**🧪 Sandbox Testing:**")
+                                                f"**2️⃣ OCO EXIT ORDERS** ({len(oco_orders)} orders - One Cancels Other)")
                                             st.caption(
-                                                "In sandbox, you need to manually simulate fills since limit orders > $3 don't auto-fill")
+                                                "These activate when the trigger order fills. Whichever executes first will automatically cancel the other.")
 
-                                            if st.button(f"✅ Simulate Fill for Order #{order.get('id')}", key=f"fill_{order.get('id')}"):
-                                                st.info(
-                                                    "📝 In sandbox, contact TastyTrade support to manually fill orders, or:")
-                                                st.write(
-                                                    "1. Cancel this order")
-                                                st.write(
-                                                    "2. Submit a new order with price ≤ $3 for instant fill")
-                                                st.write(
-                                                    "3. Or use TastyTrade's sandbox UI to manually fill")
+                                            for idx, oco_order in enumerate(oco_orders):
+                                                oco_type = oco_order.get(
+                                                    'order-type', '')
+                                                oco_status = oco_order.get(
+                                                    'status', 'Unknown')
+                                                oco_price = oco_order.get(
+                                                    'price', 'N/A')
 
-                                            # Cancel button
-                                            if st.button(f"❌ Cancel Order #{order.get('id')}", key=f"cancel_{order.get('id')}", type="secondary"):
-                                                try:
-                                                    from integrations.tastytrade.orders import cancel_order
-                                                    order_id = order.get('id')
-                                                    if order_id is not None:
-                                                        result = cancel_order(
-                                                            session, account_number, int(order_id))
-                                                        st.success(
-                                                            f"✅ Order #{order_id} cancelled! Click 'Refresh Live Orders' to update the list.")
-                                                        # Store cancelled order ID to hide it
-                                                        if 'cancelled_orders' not in st.session_state:
-                                                            st.session_state['cancelled_orders'] = [
-                                                            ]
-                                                        st.session_state['cancelled_orders'].append(
-                                                            order_id)
-                                                    else:
-                                                        st.error(
-                                                            "Order ID not found")
-                                                except Exception as e:
-                                                    st.error(
-                                                        f"❌ Cancel failed: {e}")
-
-                            else:
-                                st.info("No live orders found")
-
-                except Exception as e:
-                    st.error(f"Error loading orders: {e}")
-
-                # Show current positions
-                st.write("\n")
-                st.subheader("📊 Current Positions & P&L")
-
-                try:
-                    from integrations.tastytrade.account import get_options_positions, get_spread_pnl
-
-                    session = st.session_state.get('auth_session')
-                    if session:
-                        account_numbers = get_account_numbers(session)
-                        if account_numbers:
-                            account_number = account_numbers[0]
-                            positions = get_options_positions(
-                                session, account_number)
-
-                            if positions:
-                                st.write(
-                                    f"**Found {len(positions)} option positions:**")
-
-                                # Calculate total P&L summary
-                                total_unrealized_pnl = 0.0
-                                spread_count = 0
-
-                                # Group positions by expiration/underlying for spread identification
-                                from collections import defaultdict
-                                spread_groups = defaultdict(list)
-
-                                for pos in positions:
-                                    underlying = pos.get(
-                                        'underlying-symbol', 'Unknown')
-                                    exp_date = pos.get(
-                                        'expires-at', '')[:10]  # YYYY-MM-DD
-                                    key = f"{underlying}_{exp_date}"
-                                    spread_groups[key].append(pos)
-
-                                st.info(
-                                    f"💡 Detected {len(spread_groups)} spread(s) across {len(positions)} positions")
-
-                                # Display each spread group
-                                for group_key, spread_positions in spread_groups.items():
-                                    underlying, exp_date = group_key.split('_')
-
-                                    with st.expander(f"📈 {underlying} Spread - Expires {exp_date} ({len(spread_positions)} legs)", expanded=True):
-
-                                        # If 2-leg spread, calculate P&L
-                                        if len(spread_positions) == 2:
-                                            spread_count += 1
-
-                                            # Get current mark prices for each leg
-                                            current_marks = {}
-                                            entry_credit = 0.0
-
-                                            spread_cols = st.columns(2)
-
-                                            for idx, pos in enumerate(spread_positions):
-                                                symbol = pos.get(
-                                                    'symbol', 'Unknown')
-                                                qty = float(
-                                                    pos.get('quantity', 0))
-                                                qty_direction = pos.get(
-                                                    'quantity-direction', 'Unknown')
-                                                avg_price = float(
-                                                    pos.get('average-open-price', 0))
-                                                close_price = float(
-                                                    pos.get('close-price', avg_price))
-                                                multiplier = int(
-                                                    pos.get('multiplier', 100))
-
-                                                # Use close price as current mark
-                                                current_marks[symbol] = close_price
-
-                                                # Calculate entry credit component
-                                                if qty_direction == 'Short':
-                                                    entry_credit += avg_price * \
-                                                        abs(qty) * multiplier
+                                                # Determine if it's take profit or stop loss based on order type
+                                                if 'Stop' in oco_type:
+                                                    label = "🛑 Stop Loss"
                                                 else:
-                                                    entry_credit -= avg_price * \
-                                                        abs(qty) * multiplier
+                                                    label = "💰 Take Profit"
 
-                                                # Display leg details
-                                                position_type = "🔴 SHORT" if qty_direction == "Short" else "🟢 LONG"
-                                                strike = pos.get(
-                                                    'strike-price', 0)
+                                                st.write(
+                                                    f"\n**{label}** (Order #{oco_order.get('id')})")
+                                                oco_cols = st.columns(3)
+                                                oco_cols[0].write(
+                                                    f"Type: {oco_type}")
+                                                oco_cols[1].write(
+                                                    f"Status: {oco_status}")
+                                                oco_cols[2].write(
+                                                    f"Price: ${oco_price}")
 
-                                                with spread_cols[idx]:
-                                                    st.metric(
-                                                        f"{position_type} Leg", f"${strike:.2f}")
-                                                    st.caption(
-                                                        f"Qty: {abs(qty):.0f} | Entry: ${avg_price:.2f} | Mark: ${close_price:.2f}")
+                                                if oco_order.get('stop-trigger'):
+                                                    st.write(
+                                                        f"Stop Trigger: ${oco_order.get('stop-trigger')}")
 
-                                            # Calculate spread P&L
+                                                if oco_order.get('legs'):
+                                                    st.caption("Legs: " + ", ".join(
+                                                        [f"{leg.get('action')} {leg.get('quantity')}x" for leg in oco_order['legs']]))
+
+                                        # Cancel button for entire complex order
+                                        st.divider()
+                                        if st.button(f"❌ Cancel Entire Bracket Order #{complex_id}", key=f"cancel_complex_{complex_id}", type="secondary"):
                                             try:
-                                                pnl_info = get_spread_pnl(
-                                                    spread_positions, current_marks)
+                                                from integrations.tastytrade.orders import cancel_order
+                                                cancelled_count = 0
 
-                                                unrealized_pnl = pnl_info['unrealized_pnl']
-                                                pnl_pct = pnl_info['pnl_pct_of_credit'] * 100
-                                                current_debit = pnl_info['current_debit']
+                                                # Cancel trigger
+                                                if trigger and trigger.get('id'):
+                                                    cancel_order(
+                                                        session, account_number, int(trigger.get('id')))
+                                                    cancelled_count += 1
 
-                                                total_unrealized_pnl += unrealized_pnl
+                                                # Cancel OCO orders
+                                                for oco in oco_orders:
+                                                    if oco.get('id'):
+                                                        cancel_order(
+                                                            session, account_number, int(oco.get('id')))
+                                                        cancelled_count += 1
 
-                                                # P&L display
-                                                st.write("---")
-                                                pnl_cols = st.columns(4)
-                                                pnl_cols[0].metric(
-                                                    "Entry Credit", f"${entry_credit:.2f}")
-                                                pnl_cols[1].metric(
-                                                    "Current Cost", f"${current_debit:.2f}")
-                                                pnl_cols[2].metric("Unrealized P&L",
-                                                                   f"${unrealized_pnl:.2f}",
-                                                                   delta=f"{pnl_pct:.1f}%")
-                                                pnl_cols[3].metric("P&L %",
-                                                                   f"{pnl_pct:.1f}%",
-                                                                   delta="Profit" if unrealized_pnl > 0 else "Loss")
-
-                                                # Exit recommendations
-                                                if pnl_pct >= 50:
-                                                    st.success(
-                                                        f"✅ **TAKE PROFIT ZONE** - Consider closing at {pnl_pct:.1f}% profit")
-                                                elif pnl_pct <= -100:
-                                                    st.error(
-                                                        f"⚠️ **STOP LOSS ZONE** - Consider closing to limit loss at {pnl_pct:.1f}%")
-                                                elif pnl_pct >= 25:
-                                                    st.info(
-                                                        f"💰 Approaching profit target ({pnl_pct:.1f}%)")
-                                                else:
-                                                    st.caption(
-                                                        f"� Current P&L: {pnl_pct:.1f}%")
-
+                                                st.success(
+                                                    f"✅ Cancelled {cancelled_count} orders in bracket #{complex_id}. Click 'Refresh' to update.")
                                             except Exception as e:
-                                                st.warning(
-                                                    f"Could not calculate P&L: {e}")
+                                                st.error(
+                                                    f"❌ Cancel failed: {e}")
 
-                                        else:
-                                            # Single leg or complex structure
-                                            for pos in spread_positions:
-                                                symbol = pos.get(
-                                                    'symbol', 'Unknown')
-                                                qty = pos.get('quantity', 0)
-                                                qty_direction = pos.get(
-                                                    'quantity-direction', 'Unknown')
-                                                avg_price = float(
-                                                    pos.get('average-open-price', 0))
-                                                close_price = float(
-                                                    pos.get('close-price', avg_price))
+                            # Display simple orders
+                            for order in simple_orders:
+                                with st.expander(f"Order #{order.get('id')} - {order.get('status', 'Unknown')} - {order.get('order-type', '')}"):
+                                    col1, col2, col3 = st.columns(3)
 
-                                                position_type = "🟢 LONG" if qty_direction == "Long" else "🔴 SHORT"
+                                    col1.write(
+                                        f"**Status:** {order.get('status')}")
+                                    col2.write(
+                                        f"**Type:** {order.get('order-type')}")
+                                    col3.write(
+                                        f"**Size:** {order.get('size')}")
 
-                                                col1, col2, col3 = st.columns(
-                                                    3)
-                                                col1.metric(
-                                                    "Type", position_type)
-                                                col2.metric("Quantity", qty)
-                                                col3.metric(
-                                                    "Avg Open", f"${avg_price:.2f}")
+                                    if order.get('price'):
+                                        st.write(
+                                            f"**Price:** ${order.get('price')} ({order.get('price-effect')})")
 
-                                # Overall summary
-                                if spread_count > 0:
-                                    st.write("---")
-                                    st.write("### 💼 Portfolio Summary")
-                                    summary_cols = st.columns(3)
-                                    summary_cols[0].metric(
-                                        "Total Spreads", spread_count)
-                                    summary_cols[1].metric(
-                                        "Total Positions", len(positions))
-                                    summary_cols[2].metric("Total Unrealized P&L",
-                                                           f"${total_unrealized_pnl:.2f}",
-                                                           delta="Profit" if total_unrealized_pnl > 0 else "Loss")
-                            else:
-                                st.info("No open positions")
+                                    if order.get('underlying-symbol'):
+                                        st.write(
+                                            f"**Underlying:** {order.get('underlying-symbol')}")
 
-                            # Add OCO exit button if positions exist
-                            if positions and len(positions) == 2:
-                                st.write("\n")
-                                st.subheader("🎯 Place OCO Exit Orders")
-                                st.write(
-                                    "Set profit target and stop loss for your open spread:")
+                                    # Show legs
+                                    if order.get('legs'):
+                                        st.write("**Legs:**")
+                                        for i, leg in enumerate(order['legs']):
+                                            st.write(
+                                                f"  {i+1}. {leg.get('action')} {leg.get('quantity')}x {leg.get('symbol')}")
 
-                                oco_col1, oco_col2 = st.columns(2)
-                                with oco_col1:
-                                    oco_take_profit = st.slider(
-                                        "Take Profit %",
-                                        min_value=25,
-                                        max_value=75,
-                                        value=50,
-                                        step=5,
-                                        key="oco_tp",
-                                        help="Close when profit reaches this % of credit"
-                                    )
-                                with oco_col2:
-                                    oco_stop_loss = st.slider(
-                                        "Stop Loss %",
-                                        min_value=50,
-                                        max_value=200,
-                                        value=100,
-                                        step=10,
-                                        key="oco_sl",
-                                        help="Close when loss reaches this % of credit"
-                                    )
+                                    # Sandbox fill simulation button
+                                    if order.get('status') in ['Received', 'Live', 'Contingent']:
+                                        st.write(
+                                            "\n**🧪 Sandbox Testing:**")
+                                        st.caption(
+                                            "In sandbox, you need to manually simulate fills since limit orders > $3 don't auto-fill")
 
-                                # Calculate exit prices - use stored spread data if available
-                                if 'current_spread' in st.session_state:
-                                    entry_credit = st.session_state['current_spread']['credit']
-                                    stored_sell_leg = st.session_state['current_spread']['sell_leg']
-                                    stored_buy_leg = st.session_state['current_spread']['buy_leg']
-                                else:
-                                    # Fallback to $2.99 if no stored data
-                                    entry_credit = 2.99
-                                    stored_sell_leg = None
-                                    stored_buy_leg = None
+                                        if st.button(f"✅ Simulate Fill for Order #{order.get('id')}", key=f"fill_{order.get('id')}"):
+                                            st.info(
+                                                "📝 In sandbox, contact TastyTrade support to manually fill orders, or:")
+                                            st.write(
+                                                "1. Cancel this order")
+                                            st.write(
+                                                "2. Submit a new order with price ≤ $3 for instant fill")
+                                            st.write(
+                                                "3. Or use TastyTrade's sandbox UI to manually fill")
 
-                                tp_price = entry_credit * \
-                                    (1 - oco_take_profit / 100.0)
-                                sl_price = entry_credit * \
-                                    (1 + oco_stop_loss / 100.0)
+                                        # Cancel button
+                                        if st.button(f"❌ Cancel Order #{order.get('id')}", key=f"cancel_{order.get('id')}", type="secondary"):
+                                            try:
+                                                from integrations.tastytrade.orders import cancel_order
+                                                order_id = order.get('id')
+                                                if order_id is not None:
+                                                    result = cancel_order(
+                                                        session, account_number, int(order_id))
+                                                    st.success(
+                                                        f"✅ Order #{order_id} cancelled! Click 'Refresh Live Orders' to update the list.")
+                                                    # Store cancelled order ID to hide it
+                                                    if 'cancelled_orders' not in st.session_state:
+                                                        st.session_state['cancelled_orders'] = [
+                                                        ]
+                                                    st.session_state['cancelled_orders'].append(
+                                                        order_id)
+                                                else:
+                                                    st.error(
+                                                        "Order ID not found")
+                                            except Exception as e:
+                                                st.error(
+                                                    f"❌ Cancel failed: {e}")
 
-                                oco_info = st.columns(3)
-                                oco_info[0].metric(
-                                    "Entry Credit", f"${entry_credit:.2f}")
-                                oco_info[1].metric("Take Profit At", f"${tp_price:.2f}",
-                                                   help=f"Close at {oco_take_profit}% profit")
-                                oco_info[2].metric("Stop Loss At", f"${sl_price:.2f}",
-                                                   help=f"Close at {oco_stop_loss}% loss")
+                        else:
+                            st.info("No live orders found")
 
-                                st.warning(
-                                    "⚠️ **Sandbox Limitation**: OCO orders don't work in sandbox. This will place TWO SEPARATE orders instead.")
-                                st.caption(
-                                    "You'll need to manually cancel one order when the other fills.")
+            except Exception as e:
+                st.error(f"Error loading orders: {e}")
 
-                                if st.button("🚀 Place Exit Orders (Separate)", type="primary", key="place_oco_btn", use_container_width=True):
-                                    with st.spinner("Submitting exit orders..."):
+            # Show current positions
+            st.write("\n")
+            st.subheader("📊 Current Positions & P&L")
+
+            try:
+                from integrations.tastytrade.account import get_options_positions, get_spread_pnl
+
+                session = st.session_state.get('auth_session')
+                if session:
+                    account_numbers = get_account_numbers(session)
+                    if account_numbers:
+                        account_number = account_numbers[0]
+                        positions = get_options_positions(
+                            session, account_number)
+
+                        if positions:
+                            st.write(
+                                f"**Found {len(positions)} option positions:**")
+
+                            # Calculate total P&L summary
+                            total_unrealized_pnl = 0.0
+                            spread_count = 0
+
+                            # Group positions by expiration/underlying for spread identification
+                            from collections import defaultdict
+                            spread_groups = defaultdict(list)
+
+                            for pos in positions:
+                                underlying = pos.get(
+                                    'underlying-symbol', 'Unknown')
+                                exp_date = pos.get(
+                                    'expires-at', '')[:10]  # YYYY-MM-DD
+                                key = f"{underlying}_{exp_date}"
+                                spread_groups[key].append(pos)
+
+                            st.info(
+                                f"💡 Detected {len(spread_groups)} spread(s) across {len(positions)} positions")
+
+                            # Display each spread group
+                            for group_key, spread_positions in spread_groups.items():
+                                underlying, exp_date = group_key.split('_')
+
+                                with st.expander(f"📈 {underlying} Spread - Expires {exp_date} ({len(spread_positions)} legs)", expanded=True):
+
+                                    # If 2-leg spread, calculate P&L
+                                    if len(spread_positions) == 2:
+                                        spread_count += 1
+
+                                        # Get current mark prices for each leg
+                                        current_marks = {}
+                                        entry_credit = 0.0
+
+                                        spread_cols = st.columns(2)
+
+                                        for idx, pos in enumerate(spread_positions):
+                                            symbol = pos.get(
+                                                'symbol', 'Unknown')
+                                            qty = float(
+                                                pos.get('quantity', 0))
+                                            qty_direction = pos.get(
+                                                'quantity-direction', 'Unknown')
+                                            avg_price = float(
+                                                pos.get('average-open-price', 0))
+                                            close_price = float(
+                                                pos.get('close-price', avg_price))
+                                            multiplier = int(
+                                                pos.get('multiplier', 100))
+
+                                            # Use close price as current mark
+                                            current_marks[symbol] = close_price
+
+                                            # Calculate entry credit component
+                                            if qty_direction == 'Short':
+                                                entry_credit += avg_price * \
+                                                    abs(qty) * multiplier
+                                            else:
+                                                entry_credit -= avg_price * \
+                                                    abs(qty) * multiplier
+
+                                            # Display leg details
+                                            position_type = "🔴 SHORT" if qty_direction == "Short" else "🟢 LONG"
+                                            strike = pos.get(
+                                                'strike-price', 0)
+
+                                            with spread_cols[idx]:
+                                                st.metric(
+                                                    f"{position_type} Leg", f"${strike:.2f}")
+                                                st.caption(
+                                                    f"Qty: {abs(qty):.0f} | Entry: ${avg_price:.2f} | Mark: ${close_price:.2f}")
+
+                                        # Calculate spread P&L
                                         try:
-                                            from integrations.tastytrade.orders import place_separate_exit_orders
-                                            from integrations.tastytrade.account import get_account_numbers
+                                            pnl_info = get_spread_pnl(
+                                                spread_positions, current_marks)
 
-                                            session = st.session_state.get(
-                                                'auth_session')
-                                            if session:
-                                                account_numbers = get_account_numbers(
-                                                    session)
-                                                if account_numbers:
-                                                    account_number = account_numbers[0]
+                                            unrealized_pnl = pnl_info['unrealized_pnl']
+                                            pnl_pct = pnl_info['pnl_pct_of_credit'] * 100
+                                            current_debit = pnl_info['current_debit']
 
-                                                    # Check if we have stored spread data
-                                                    if stored_sell_leg and stored_buy_leg:
-                                                        # Use stored spread details - place separate orders
-                                                        result = place_separate_exit_orders(
-                                                            session=session,
-                                                            account_number=account_number,
-                                                            underlying="SPY",
-                                                            sell_leg=stored_sell_leg,
-                                                            buy_leg=stored_buy_leg,
-                                                            num_contracts=3,  # Your current position size
-                                                            entry_credit=entry_credit,
-                                                            take_profit_pct=oco_take_profit / 100.0,
-                                                            stop_loss_pct=oco_stop_loss / 100.0
-                                                        )
+                                            total_unrealized_pnl += unrealized_pnl
 
-                                                        st.success(
-                                                            "✅ Exit orders placed successfully!")
-                                                        st.json(result)
-                                                        st.warning(
-                                                            "⚠️ **Important**: These are TWO INDEPENDENT orders (not OCO). When one fills, you MUST manually cancel the other!")
+                                            # P&L display
+                                            st.write("---")
+                                            pnl_cols = st.columns(4)
+                                            pnl_cols[0].metric(
+                                                "Entry Credit", f"${entry_credit:.2f}")
+                                            pnl_cols[1].metric(
+                                                "Current Cost", f"${current_debit:.2f}")
+                                            pnl_cols[2].metric("Unrealized P&L",
+                                                               f"${unrealized_pnl:.2f}",
+                                                               delta=f"{pnl_pct:.1f}%")
+                                            pnl_cols[3].metric("P&L %",
+                                                               f"{pnl_pct:.1f}%",
+                                                               delta="Profit" if unrealized_pnl > 0 else "Loss")
 
-                                                        # Store in session
-                                                        st.session_state['last_oco_result'] = result
-                                                    else:
-                                                        st.error(
-                                                            "❌ No spread data found. Please find a spread first.")
+                                            # Exit recommendations
+                                            if pnl_pct >= 50:
+                                                st.success(
+                                                    f"✅ **TAKE PROFIT ZONE** - Consider closing at {pnl_pct:.1f}% profit")
+                                            elif pnl_pct <= -100:
+                                                st.error(
+                                                    f"⚠️ **STOP LOSS ZONE** - Consider closing to limit loss at {pnl_pct:.1f}%")
+                                            elif pnl_pct >= 25:
+                                                st.info(
+                                                    f"💰 Approaching profit target ({pnl_pct:.1f}%)")
+                                            else:
+                                                st.caption(
+                                                    f"� Current P&L: {pnl_pct:.1f}%")
 
                                         except Exception as e:
-                                            st.error(
-                                                f"❌ OCO order failed: {e}")
+                                            st.warning(
+                                                f"Could not calculate P&L: {e}")
 
-                except Exception as e:
-                    st.error(f"Error loading positions: {e}")
+                                    else:
+                                        # Single leg or complex structure
+                                        for pos in spread_positions:
+                                            symbol = pos.get(
+                                                'symbol', 'Unknown')
+                                            qty = pos.get('quantity', 0)
+                                            qty_direction = pos.get(
+                                                'quantity-direction', 'Unknown')
+                                            avg_price = float(
+                                                pos.get('average-open-price', 0))
+                                            close_price = float(
+                                                pos.get('close-price', avg_price))
 
-                st.write("\n")
-                if avg_return_pct >= 20:
-                    st.success(
-                        "🎯 This spread meets the 20%+ return on risk threshold!")
-                else:
-                    st.warning(
-                        "⚠️ Return below 20% - consider different strikes or expiration.")
+                                            position_type = "🟢 LONG" if qty_direction == "Long" else "🔴 SHORT"
+
+                                            col1, col2, col3 = st.columns(
+                                                3)
+                                            col1.metric(
+                                                "Type", position_type)
+                                            col2.metric("Quantity", qty)
+                                            col3.metric(
+                                                "Avg Open", f"${avg_price:.2f}")
+
+                            # Overall summary
+                            if spread_count > 0:
+                                st.write("---")
+                                st.write("### 💼 Portfolio Summary")
+                                summary_cols = st.columns(3)
+                                summary_cols[0].metric(
+                                    "Total Spreads", spread_count)
+                                summary_cols[1].metric(
+                                    "Total Positions", len(positions))
+                                summary_cols[2].metric("Total Unrealized P&L",
+                                                       f"${total_unrealized_pnl:.2f}",
+                                                       delta="Profit" if total_unrealized_pnl > 0 else "Loss")
+                        else:
+                            st.info("No open positions")
+
+                        # Add OCO exit button if positions exist
+                        if positions and len(positions) == 2:
+                            st.write("\n")
+                            st.subheader("🎯 Place OCO Exit Orders")
+                            st.write(
+                                "Set profit target and stop loss for your open spread:")
+
+                            oco_col1, oco_col2 = st.columns(2)
+                            with oco_col1:
+                                oco_take_profit = st.slider(
+                                    "Take Profit %",
+                                    min_value=25,
+                                    max_value=75,
+                                    value=50,
+                                    step=5,
+                                    key="oco_tp",
+                                    help="Close when profit reaches this % of credit"
+                                )
+                            with oco_col2:
+                                oco_stop_loss = st.slider(
+                                    "Stop Loss %",
+                                    min_value=50,
+                                    max_value=200,
+                                    value=100,
+                                    step=10,
+                                    key="oco_sl",
+                                    help="Close when loss reaches this % of credit"
+                                )
+
+                            # Calculate exit prices - use stored spread data if available
+                            if 'current_spread' in st.session_state:
+                                entry_credit = st.session_state['current_spread']['credit']
+                                stored_sell_leg = st.session_state['current_spread']['sell_leg']
+                                stored_buy_leg = st.session_state['current_spread']['buy_leg']
+                            else:
+                                # Fallback to $2.99 if no stored data
+                                entry_credit = 2.99
+                                stored_sell_leg = None
+                                stored_buy_leg = None
+
+                            tp_price = entry_credit * \
+                                (1 - oco_take_profit / 100.0)
+                            sl_price = entry_credit * \
+                                (1 + oco_stop_loss / 100.0)
+
+                            oco_info = st.columns(3)
+                            oco_info[0].metric(
+                                "Entry Credit", f"${entry_credit:.2f}")
+                            oco_info[1].metric("Take Profit At", f"${tp_price:.2f}",
+                                               help=f"Close at {oco_take_profit}% profit")
+                            oco_info[2].metric("Stop Loss At", f"${sl_price:.2f}",
+                                               help=f"Close at {oco_stop_loss}% loss")
+
+                            st.warning(
+                                "⚠️ **Sandbox Limitation**: OCO orders don't work in sandbox. This will place TWO SEPARATE orders instead.")
+                            st.caption(
+                                "You'll need to manually cancel one order when the other fills.")
+
+                            if st.button("🚀 Place Exit Orders (Separate)", type="primary", key="place_oco_btn", use_container_width=True):
+                                with st.spinner("Submitting exit orders..."):
+                                    try:
+                                        from integrations.tastytrade.orders import place_separate_exit_orders
+                                        from integrations.tastytrade.account import get_account_numbers
+
+                                        session = st.session_state.get(
+                                            'auth_session')
+                                        if session:
+                                            account_numbers = get_account_numbers(
+                                                session)
+                                            if account_numbers:
+                                                account_number = account_numbers[0]
+
+                                                # Check if we have stored spread data
+                                                if stored_sell_leg and stored_buy_leg:
+                                                    # Use stored spread details - place separate orders
+                                                    result = place_separate_exit_orders(
+                                                        session=session,
+                                                        account_number=account_number,
+                                                        underlying="SPY",
+                                                        sell_leg=stored_sell_leg,
+                                                        buy_leg=stored_buy_leg,
+                                                        num_contracts=3,  # Your current position size
+                                                        entry_credit=entry_credit,
+                                                        take_profit_pct=oco_take_profit / 100.0,
+                                                        stop_loss_pct=oco_stop_loss / 100.0
+                                                    )
+
+                                                    st.success(
+                                                        "✅ Exit orders placed successfully!")
+                                                    st.json(result)
+                                                    st.warning(
+                                                        "⚠️ **Important**: These are TWO INDEPENDENT orders (not OCO). When one fills, you MUST manually cancel the other!")
+
+                                                    # Store in session
+                                                    st.session_state['last_oco_result'] = result
+                                                else:
+                                                    st.error(
+                                                        "❌ No spread data found. Please find a spread first.")
+
+                                    except Exception as e:
+                                        st.error(
+                                            f"❌ OCO order failed: {e}")
+
+            except Exception as e:
+                st.error(f"Error loading positions: {e}")
+
+            st.write("\n")
+            if avg_return_pct >= 20:
+                st.success(
+                    "🎯 This spread meets the 20%+ return on risk threshold!")
             else:
-                st.info(
-                    "🔍 No suitable put credit spreads found with target criteria:")
-                st.write("- **DTE:** 30-45 days")
-                st.write("- **Sell Put δ:** ~-0.50")
-                st.write("- **Buy Put δ:** ~-0.25")
-                st.write("- **Target:** 20%+ return on risk")
-
-    else:
-        st.info("👆 Please authorize with Tastytrade above to view options data.")
+                st.warning(
+                    "⚠️ Return below 20% - consider different strikes or expiration.")
+        else:
+            st.info(
+                "🔍 No suitable put credit spreads found with target criteria:")
+            st.write("- **DTE:** 30-45 days")
+            st.write("- **Sell Put δ:** ~-0.50")
+            st.write("- **Buy Put δ:** ~-0.25")
+            st.write("- **Target:** 20%+ return on risk")
 
 with tab_backtest:
     st.subheader("Historical Backtest")
