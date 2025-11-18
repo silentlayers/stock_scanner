@@ -160,8 +160,6 @@ st.markdown("""
 </script>
 """, unsafe_allow_html=True)
 
-st.title("Stock Scanner")
-
 # Detect mobile device
 
 
@@ -169,6 +167,129 @@ def is_mobile():
     """Detect if user is on mobile based on query param set by JavaScript"""
     return st.query_params.get('_mobile', 'false') == 'true'
 
+
+def is_running_on_cloud():
+    """Detect if running on Streamlit Cloud"""
+    # Allow manual override for testing
+    if os.getenv('FORCE_CLOUD_AUTH', 'false').lower() in ('true', '1', 'yes'):
+        return True
+
+    # Check multiple indicators of Streamlit Cloud
+    hostname = os.getenv('HOSTNAME', '')
+    cloud_indicators = [
+        os.getenv('STREAMLIT_SHARING_MODE') is not None,
+        hostname.startswith('streamlit'),
+        os.getenv('IS_STREAMLIT_CLOUD') is not None,
+        'streamlit.app' in hostname,
+        os.getenv('STREAMLIT_RUNTIME_ENVIRONMENT') == 'cloud',
+    ]
+
+    return any(cloud_indicators)
+
+
+def show_login_page():
+    """Display login/authorization page"""
+    st.title("🔐 Stock Scanner Login")
+    st.write("---")
+
+    on_cloud = is_running_on_cloud()
+
+    if on_cloud:
+        from integrations.tastytrade.cloud_auth import authenticate_cloud
+
+        st.info("Please authorize with TastyTrade to access the application.")
+
+        # Try to get auth from URL query params or show auth link
+        result = authenticate_cloud()
+        if result is not None:
+            session, token = result
+            st.session_state['auth_session'] = session
+            st.session_state['oauth_token'] = token
+            st.success("✅ Login successful! Redirecting...")
+            st.rerun()
+    else:
+        # Local authentication with callback server
+        st.info("Please authorize with TastyTrade to access the application.")
+
+        # Check for existing token first
+        from integrations.tastytrade.token_manager import get_persistent_session
+        existing = get_persistent_session()
+        if existing:
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ Use Saved Token", use_container_width=True, type="primary"):
+                    session, token = existing
+                    st.session_state['auth_session'] = session
+                    st.session_state['oauth_token'] = token
+                    st.success("✅ Login successful!")
+                    st.rerun()
+            with col2:
+                if st.button("🔄 Authorize Again", use_container_width=True):
+                    st.session_state['force_new_auth'] = True
+                    st.rerun()
+
+            if not st.session_state.get('force_new_auth', False):
+                st.caption(
+                    "💡 A saved token was found. Click 'Use Saved Token' to log in.")
+                return
+
+        # Show authorization flow
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            if st.button("🔓 Authorize with TastyTrade", use_container_width=True, type="primary"):
+                # Generate auth URL manually
+                from integrations.tastytrade.config import get_oauth_settings, get_oauth_scopes
+                from requests_oauthlib import OAuth2Session
+
+                authorization_base_url, token_url, client_id, client_secret, redirect_uri = get_oauth_settings()
+                oauth = OAuth2Session(
+                    client_id, redirect_uri=redirect_uri, scope=get_oauth_scopes())
+                auth_url, state = oauth.authorization_url(
+                    authorization_base_url)
+
+                st.markdown("### 🔐 Authorization URL")
+                st.info("**Copy this URL and open it in your browser:**")
+                st.code(auth_url, language=None)
+                st.link_button("🌐 Or Click Here to Open", auth_url)
+                st.warning(
+                    "⚠️ After authorizing, the app will attempt to catch the callback automatically. Keep this window open!")
+
+                # Start callback server in background
+                try:
+                    session, token = authenticate()
+                    if token:
+                        st.session_state['auth_session'] = session
+                        st.session_state['oauth_token'] = token
+                        st.success("✅ Login successful!")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Authorization failed: {e}")
+
+
+def is_authenticated():
+    """Check if user is authenticated"""
+    return 'auth_session' in st.session_state and st.session_state['auth_session'] is not None
+
+
+# Main app logic - check authentication first
+if not is_authenticated():
+    show_login_page()
+    st.stop()  # Stop execution here if not authenticated
+
+# User is authenticated - show the main app
+st.title("Stock Scanner")
+
+# Add logout button in sidebar
+with st.sidebar:
+    st.write("### Account")
+    if st.button("🚪 Logout", use_container_width=True):
+        # Clear session state
+        if 'auth_session' in st.session_state:
+            del st.session_state['auth_session']
+        if 'oauth_token' in st.session_state:
+            del st.session_state['oauth_token']
+        st.success("Logged out successfully!")
+        st.rerun()
 
 # Auto-refresh every 30 seconds during market hours (60 seconds on mobile for better performance)
 if 'last_refresh' not in st.session_state:
@@ -193,99 +314,8 @@ def load_market_data():
     return spy, vix, spy_close, vix_close, inds
 
 
-def is_running_on_cloud():
-    """Detect if running on Streamlit Cloud"""
-    # Allow manual override for testing
-    if os.getenv('FORCE_CLOUD_AUTH', 'false').lower() in ('true', '1', 'yes'):
-        return True
-
-    # Check multiple indicators of Streamlit Cloud
-    hostname = os.getenv('HOSTNAME', '')
-    cloud_indicators = [
-        os.getenv('STREAMLIT_SHARING_MODE') is not None,
-        # Changed from 'streamlit-' to 'streamlit'
-        hostname.startswith('streamlit'),
-        os.getenv('IS_STREAMLIT_CLOUD') is not None,
-        'streamlit.app' in hostname,
-        os.getenv('STREAMLIT_RUNTIME_ENVIRONMENT') == 'cloud',
-    ]
-
-    return any(cloud_indicators)
-
-
 def ensure_session():
-    if 'auth_session' not in st.session_state or st.session_state['auth_session'] is None:
-        # Use cloud-friendly auth if on cloud, local auth otherwise
-        on_cloud = is_running_on_cloud()
-
-        if on_cloud:
-            from integrations.tastytrade.cloud_auth import authenticate_cloud
-
-            # Try to get auth from URL query params or show auth link
-            result = authenticate_cloud()
-            if result is not None:
-                session, token = result
-                st.session_state['auth_session'] = session
-                st.session_state['oauth_token'] = token
-                st.rerun()
-            else:
-                # Still waiting for authorization
-                return False
-        else:
-            # Local authentication with callback server
-            st.warning(
-                "You need to authorize with Tastytrade to fetch options data.")
-
-            # Check for existing token first
-            from integrations.tastytrade.token_manager import get_persistent_session
-            existing = get_persistent_session()
-            if existing:
-                if st.button("Use Saved Token"):
-                    session, token = existing
-                    st.session_state['auth_session'] = session
-                    st.session_state['oauth_token'] = token
-                    st.success("✅ Using saved token!")
-                    st.rerun()
-                st.info(
-                    "💡 Found a saved token. Click above to use it, or authorize again below.")
-
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                if st.button("Authorize Tastytrade"):
-                    # Generate auth URL manually
-                    from integrations.tastytrade.config import get_oauth_settings, get_oauth_scopes
-                    from requests_oauthlib import OAuth2Session
-
-                    authorization_base_url, token_url, client_id, client_secret, redirect_uri = get_oauth_settings()
-                    oauth = OAuth2Session(
-                        client_id, redirect_uri=redirect_uri, scope=get_oauth_scopes())
-                    auth_url, state = oauth.authorization_url(
-                        authorization_base_url)
-
-                    st.markdown("### 🔐 Manual Authorization")
-                    st.info("**Copy this URL and open it in your browser:**")
-                    st.code(auth_url, language=None)
-                    st.link_button("🌐 Or Click Here to Open", auth_url)
-                    st.warning(
-                        "⚠️ After authorizing, the app will attempt to catch the callback automatically. Keep this window open!")
-
-                    # Try to start the auth flow in background
-                    try:
-                        with st.spinner("Waiting for authorization... (check your browser)"):
-                            session, token = authenticate()
-                            st.session_state['auth_session'] = session
-                            st.session_state['oauth_token'] = token
-                            st.success("✅ Authorized successfully!")
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Authentication failed: {e}")
-                        st.info(
-                            "💡 The browser callback may have failed. Try using the cloud deployment instead.")
-            with col2:
-                if st.button("Clear Saved Token", help="Remove saved authentication token"):
-                    clear_saved_token()
-                    st.info("Saved token cleared. You'll need to re-authorize.")
-        return False
+    """Legacy function - now just returns True since auth is required to reach here"""
     return True
 
 
@@ -756,11 +786,6 @@ with tab_signal:
 
 with tab_spreads:
     st.subheader("Options Spreads")
-
-    # Single authorization check for the entire tab
-    ok = ensure_session()
-    if not ok:
-        st.stop()  # Stop here if not authorized
 
     # Initialize automation engine in session state
     if 'automation_engine' not in st.session_state:
