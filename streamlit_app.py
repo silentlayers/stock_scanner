@@ -2553,12 +2553,15 @@ with tab_buffett:
             else:
                 # Filter to only show stocks that pass all criteria
                 passed_stocks = results_df[results_df['passed_all'] == True]
-                
+
                 if passed_stocks.empty:
-                    st.warning(f"⚠️ None of the {len(results_df)} stocks screened passed all Buffett criteria.")
-                    st.info("💡 Try adjusting the criteria or screening different stocks.")
+                    st.warning(
+                        f"⚠️ None of the {len(results_df)} stocks screened passed all Buffett criteria.")
+                    st.info(
+                        "💡 Try adjusting the criteria or screening different stocks.")
                 else:
-                    st.success(f"✅ Found {len(passed_stocks)} stocks that pass all Buffett criteria (out of {len(results_df)} screened)")
+                    st.success(
+                        f"✅ Found {len(passed_stocks)} stocks that pass all Buffett criteria (out of {len(results_df)} screened)")
 
                     # Show Buffett's criteria
                     st.write("### 📊 Buffett's Screening Criteria")
@@ -2577,7 +2580,8 @@ with tab_buffett:
                         "Growth", f"≥ {screener.CRITERIA['earnings_growth_min']}%")
 
                     st.write("---")
-                    st.write(f"### 📈 Qualifying Stocks ({len(passed_stocks)} stocks)")
+                    st.write(
+                        f"### 📈 Qualifying Stocks ({len(passed_stocks)} stocks)")
 
                     # Display summary table - only passed stocks
                     summary_df = passed_stocks[[
@@ -2585,33 +2589,33 @@ with tab_buffett:
                         'roe', 'debt_to_equity', 'profit_margin', 'pe_ratio'
                     ]].copy()
 
-                summary_df['roe'] = summary_df['roe'].round(2)
-                summary_df['debt_to_equity'] = summary_df['debt_to_equity'].round(
-                    2)
-                summary_df['profit_margin'] = summary_df['profit_margin'].round(
-                    2)
-                summary_df['pe_ratio'] = summary_df['pe_ratio'].round(2)
-                summary_df['price'] = summary_df['price'].round(2)
+                    summary_df['roe'] = summary_df['roe'].round(2)
+                    summary_df['debt_to_equity'] = summary_df['debt_to_equity'].round(
+                        2)
+                    summary_df['profit_margin'] = summary_df['profit_margin'].round(
+                        2)
+                    summary_df['pe_ratio'] = summary_df['pe_ratio'].round(2)
+                    summary_df['price'] = summary_df['price'].round(2)
 
-                st.dataframe(
-                    summary_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        'ticker': 'Ticker',
-                        'name': 'Company',
-                        'sector': 'Sector',
-                        'price': st.column_config.NumberColumn('Price', format="$%.2f"),
-                        'total_pass': st.column_config.NumberColumn('Criteria Passed', format="%d/6"),
-                        'roe': st.column_config.NumberColumn('ROE %', format="%.2f%%"),
-                        'debt_to_equity': st.column_config.NumberColumn('Debt/Equity', format="%.2f"),
-                        'profit_margin': st.column_config.NumberColumn('Margin %', format="%.2f%%"),
-                        'pe_ratio': st.column_config.NumberColumn('P/E', format="%.2f"),
-                    }
-                )
+                    st.dataframe(
+                        summary_df,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            'ticker': 'Ticker',
+                            'name': 'Company',
+                            'sector': 'Sector',
+                            'price': st.column_config.NumberColumn('Price', format="$%.2f"),
+                            'total_pass': st.column_config.NumberColumn('Criteria Passed', format="%d/6"),
+                            'roe': st.column_config.NumberColumn('ROE %', format="%.2f%%"),
+                            'debt_to_equity': st.column_config.NumberColumn('Debt/Equity', format="%.2f"),
+                            'profit_margin': st.column_config.NumberColumn('Margin %', format="%.2f%%"),
+                            'pe_ratio': st.column_config.NumberColumn('P/E', format="%.2f"),
+                        }
+                    )
 
-                # Store results in session state
-                st.session_state['buffett_results'] = passed_stocks
+                    # Store results in session state
+                    st.session_state['buffett_results'] = passed_stocks
 
     # Intrinsic value calculation section
     st.write("---")
