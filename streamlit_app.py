@@ -2551,47 +2551,39 @@ with tab_buffett:
             if results_df.empty:
                 st.error("No results found. Please check your tickers.")
             else:
-                st.success(f"✅ Screened {len(results_df)} stocks")
-
-                # Show Buffett's criteria
-                st.write("### 📊 Buffett's Screening Criteria")
-                criteria_cols = st.columns(6)
-                criteria_cols[0].metric(
-                    "ROE", f"≥ {screener.CRITERIA['roe_min']}%")
-                criteria_cols[1].metric(
-                    "Debt/Equity", f"≤ {screener.CRITERIA['debt_to_equity_max']}")
-                criteria_cols[2].metric(
-                    "Current Ratio", f"≥ {screener.CRITERIA['current_ratio_min']}")
-                criteria_cols[3].metric(
-                    "Profit Margin", f"≥ {screener.CRITERIA['profit_margin_min']}%")
-                criteria_cols[4].metric(
-                    "P/E Ratio", f"≤ {screener.CRITERIA['pe_ratio_max']}")
-                criteria_cols[5].metric(
-                    "Growth", f"≥ {screener.CRITERIA['earnings_growth_min']}%")
-
-                st.write("---")
-
-                # Filter and display results
-                filter_option = st.radio(
-                    "Filter Results",
-                    ["All Stocks", "Passed All Criteria", "Passed 4+ Criteria"],
-                    horizontal=True
-                )
-
-                if filter_option == "Passed All Criteria":
-                    display_df = results_df[results_df['passed_all'] == True]
-                elif filter_option == "Passed 4+ Criteria":
-                    display_df = results_df[results_df['total_pass'] >= 4]
+                # Filter to only show stocks that pass all criteria
+                passed_stocks = results_df[results_df['passed_all'] == True]
+                
+                if passed_stocks.empty:
+                    st.warning(f"⚠️ None of the {len(results_df)} stocks screened passed all Buffett criteria.")
+                    st.info("💡 Try adjusting the criteria or screening different stocks.")
                 else:
-                    display_df = results_df
+                    st.success(f"✅ Found {len(passed_stocks)} stocks that pass all Buffett criteria (out of {len(results_df)} screened)")
 
-                st.write(f"### 📈 Results ({len(display_df)} stocks)")
+                    # Show Buffett's criteria
+                    st.write("### 📊 Buffett's Screening Criteria")
+                    criteria_cols = st.columns(6)
+                    criteria_cols[0].metric(
+                        "ROE", f"≥ {screener.CRITERIA['roe_min']}%")
+                    criteria_cols[1].metric(
+                        "Debt/Equity", f"≤ {screener.CRITERIA['debt_to_equity_max']}")
+                    criteria_cols[2].metric(
+                        "Current Ratio", f"≥ {screener.CRITERIA['current_ratio_min']}")
+                    criteria_cols[3].metric(
+                        "Profit Margin", f"≥ {screener.CRITERIA['profit_margin_min']}%")
+                    criteria_cols[4].metric(
+                        "P/E Ratio", f"≤ {screener.CRITERIA['pe_ratio_max']}")
+                    criteria_cols[5].metric(
+                        "Growth", f"≥ {screener.CRITERIA['earnings_growth_min']}%")
 
-                # Display summary table
-                summary_df = display_df[[
-                    'ticker', 'name', 'sector', 'price', 'total_pass',
-                    'roe', 'debt_to_equity', 'profit_margin', 'pe_ratio'
-                ]].copy()
+                    st.write("---")
+                    st.write(f"### 📈 Qualifying Stocks ({len(passed_stocks)} stocks)")
+
+                    # Display summary table - only passed stocks
+                    summary_df = passed_stocks[[
+                        'ticker', 'name', 'sector', 'price', 'total_pass',
+                        'roe', 'debt_to_equity', 'profit_margin', 'pe_ratio'
+                    ]].copy()
 
                 summary_df['roe'] = summary_df['roe'].round(2)
                 summary_df['debt_to_equity'] = summary_df['debt_to_equity'].round(
@@ -2619,7 +2611,7 @@ with tab_buffett:
                 )
 
                 # Store results in session state
-                st.session_state['buffett_results'] = display_df
+                st.session_state['buffett_results'] = passed_stocks
 
     # Intrinsic value calculation section
     st.write("---")
