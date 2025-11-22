@@ -393,8 +393,8 @@ def get_shiller_pe():
         return None
 
 
-tab_signal, tab_spreads, tab_backtest = st.tabs(
-    ["Signal", "Spreads", "Backtest"])
+tab_signal, tab_spreads, tab_backtest, tab_buffett = st.tabs(
+    ["Signal", "Spreads", "Backtest", "Buffett Screener"])
 
 with tab_signal:
     # Lazy load market data only when Signal tab is active
@@ -2466,3 +2466,251 @@ with tab_backtest:
                         df_show[col] = df_show[col].map(
                             lambda x: round(float(x), 2))
                 st.dataframe(df_show, use_container_width=True)
+
+with tab_buffett:
+    st.subheader("Warren Buffett Stock Screener")
+    st.caption(
+        "Screen stocks using Buffett's investment criteria and calculate intrinsic value")
+
+    from core.buffett_screener import BuffettScreener, get_buffett_portfolio, get_sp500_tickers
+
+    # Initialize screener
+    screener = BuffettScreener()
+
+    # Screening options
+    st.write("---")
+    st.write("### 📋 Select Stocks to Screen")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        screen_option = st.radio(
+            "Stock List",
+            ["Buffett's Portfolio", "Custom Tickers", "Top S&P 500"],
+            help="Choose which stocks to screen"
+        )
+
+    with col2:
+        if screen_option == "Custom Tickers":
+            custom_tickers = st.text_input(
+                "Enter tickers (comma-separated)",
+                "AAPL,MSFT,GOOGL,BRK-B,JNJ",
+                help="Enter stock tickers separated by commas"
+            )
+
+    # Intrinsic value parameters
+    st.write("### ⚙️ DCF Parameters")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        discount_rate = st.slider(
+            "Discount Rate (%)",
+            min_value=5.0,
+            max_value=15.0,
+            value=9.0,
+            step=0.5,
+            help="Required rate of return (Buffett typically uses 9-10%)"
+        )
+    with col2:
+        growth_rate = st.slider(
+            "Growth Rate - 10yr (%)",
+            min_value=0.0,
+            max_value=15.0,
+            value=7.0,
+            step=0.5,
+            help="Expected growth rate for next 10 years"
+        )
+    with col3:
+        terminal_growth = st.slider(
+            "Terminal Growth (%)",
+            min_value=0.0,
+            max_value=5.0,
+            value=3.0,
+            step=0.5,
+            help="Perpetual growth rate after 10 years"
+        )
+
+    st.write("---")
+
+    # Get tickers based on selection
+    if screen_option == "Buffett's Portfolio":
+        tickers = get_buffett_portfolio()
+        st.info(
+            f"📊 Screening {len(tickers)} stocks from Berkshire Hathaway's portfolio")
+    elif screen_option == "Custom Tickers":
+        tickers = [t.strip().upper()
+                   for t in custom_tickers.split(',') if t.strip()]
+        st.info(f"📊 Screening {len(tickers)} custom stocks")
+    else:  # Top S&P 500
+        tickers = get_sp500_tickers()
+        st.info(f"📊 Screening top {len(tickers)} S&P 500 stocks")
+
+    if st.button("🔍 Run Screener", use_container_width=True, type="primary"):
+        with st.spinner("Screening stocks... This may take a minute..."):
+            # Run the screening
+            results_df = screener.screen_multiple(tickers)
+
+            if results_df.empty:
+                st.error("No results found. Please check your tickers.")
+            else:
+                st.success(f"✅ Screened {len(results_df)} stocks")
+
+                # Show Buffett's criteria
+                st.write("### 📊 Buffett's Screening Criteria")
+                criteria_cols = st.columns(6)
+                criteria_cols[0].metric(
+                    "ROE", f"≥ {screener.CRITERIA['roe_min']}%")
+                criteria_cols[1].metric(
+                    "Debt/Equity", f"≤ {screener.CRITERIA['debt_to_equity_max']}")
+                criteria_cols[2].metric(
+                    "Current Ratio", f"≥ {screener.CRITERIA['current_ratio_min']}")
+                criteria_cols[3].metric(
+                    "Profit Margin", f"≥ {screener.CRITERIA['profit_margin_min']}%")
+                criteria_cols[4].metric(
+                    "P/E Ratio", f"≤ {screener.CRITERIA['pe_ratio_max']}")
+                criteria_cols[5].metric(
+                    "Growth", f"≥ {screener.CRITERIA['earnings_growth_min']}%")
+
+                st.write("---")
+
+                # Filter and display results
+                filter_option = st.radio(
+                    "Filter Results",
+                    ["All Stocks", "Passed All Criteria", "Passed 4+ Criteria"],
+                    horizontal=True
+                )
+
+                if filter_option == "Passed All Criteria":
+                    display_df = results_df[results_df['passed_all'] == True]
+                elif filter_option == "Passed 4+ Criteria":
+                    display_df = results_df[results_df['total_pass'] >= 4]
+                else:
+                    display_df = results_df
+
+                st.write(f"### 📈 Results ({len(display_df)} stocks)")
+
+                # Display summary table
+                summary_df = display_df[[
+                    'ticker', 'name', 'sector', 'price', 'total_pass',
+                    'roe', 'debt_to_equity', 'profit_margin', 'pe_ratio'
+                ]].copy()
+
+                summary_df['roe'] = summary_df['roe'].round(2)
+                summary_df['debt_to_equity'] = summary_df['debt_to_equity'].round(
+                    2)
+                summary_df['profit_margin'] = summary_df['profit_margin'].round(
+                    2)
+                summary_df['pe_ratio'] = summary_df['pe_ratio'].round(2)
+                summary_df['price'] = summary_df['price'].round(2)
+
+                st.dataframe(
+                    summary_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        'ticker': 'Ticker',
+                        'name': 'Company',
+                        'sector': 'Sector',
+                        'price': st.column_config.NumberColumn('Price', format="$%.2f"),
+                        'total_pass': st.column_config.NumberColumn('Criteria Passed', format="%d/6"),
+                        'roe': st.column_config.NumberColumn('ROE %', format="%.2f%%"),
+                        'debt_to_equity': st.column_config.NumberColumn('Debt/Equity', format="%.2f"),
+                        'profit_margin': st.column_config.NumberColumn('Margin %', format="%.2f%%"),
+                        'pe_ratio': st.column_config.NumberColumn('P/E', format="%.2f"),
+                    }
+                )
+
+                # Store results in session state
+                st.session_state['buffett_results'] = display_df
+
+    # Intrinsic value calculation section
+    st.write("---")
+    st.write("### 💰 Calculate Intrinsic Value")
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        # Show available tickers if screening was done
+        if 'buffett_results' in st.session_state and not st.session_state['buffett_results'].empty:
+            available_tickers = st.session_state['buffett_results']['ticker'].tolist(
+            )
+            selected_ticker = st.selectbox(
+                "Select a stock from screened results",
+                options=available_tickers,
+                help="Choose a stock to calculate intrinsic value"
+            )
+        else:
+            selected_ticker = st.text_input(
+                "Enter ticker symbol",
+                "AAPL",
+                help="Enter a stock ticker to analyze"
+            ).upper()
+
+    with col2:
+        if st.button("📊 Calculate Value", use_container_width=True):
+            with st.spinner(f"Calculating intrinsic value for {selected_ticker}..."):
+                valuation = screener.calculate_intrinsic_value(
+                    selected_ticker,
+                    discount_rate=discount_rate/100,
+                    growth_rate=growth_rate/100,
+                    terminal_growth=terminal_growth/100
+                )
+
+                if 'error' in valuation:
+                    st.error(f"❌ {valuation['error']}")
+                else:
+                    st.success(f"✅ Valuation complete for {selected_ticker}")
+
+                    # Display results
+                    st.write("#### Valuation Summary")
+
+                    val_cols = st.columns(4)
+                    val_cols[0].metric(
+                        "Current Price",
+                        f"${valuation['current_price']:.2f}"
+                    )
+                    val_cols[1].metric(
+                        "Intrinsic Value",
+                        f"${valuation['intrinsic_value']:.2f}",
+                        delta=f"{valuation['margin_of_safety']:.1f}% MOS"
+                    )
+                    val_cols[2].metric(
+                        "Margin of Safety",
+                        f"{valuation['margin_of_safety']:.1f}%",
+                        delta="Good" if valuation['margin_of_safety'] >= 20 else "Low"
+                    )
+                    val_cols[3].metric(
+                        "Recommendation",
+                        valuation['recommendation'].split(' - ')[0]
+                    )
+
+                    st.info(f"**{valuation['recommendation']}**")
+
+                    # Show calculation breakdown
+                    with st.expander("📋 Calculation Details", expanded=False):
+                        st.write("**DCF Assumptions:**")
+                        detail_cols = st.columns(3)
+                        detail_cols[0].write(
+                            f"• Discount Rate: {discount_rate}%")
+                        detail_cols[1].write(
+                            f"• Growth Rate (10yr): {growth_rate}%")
+                        detail_cols[2].write(
+                            f"• Terminal Growth: {terminal_growth}%")
+
+                        st.write("**Cash Flow Analysis:**")
+                        cf_cols = st.columns(3)
+                        cf_cols[0].metric(
+                            "Current FCF", f"${valuation['fcf']:,.0f}")
+                        cf_cols[1].metric(
+                            "10-Year PV", f"${valuation['projected_10yr_value']:,.0f}")
+                        cf_cols[2].metric(
+                            "Terminal Value PV", f"${valuation['terminal_value']:,.0f}")
+
+                        st.write("**Per Share:**")
+                        share_cols = st.columns(2)
+                        share_cols[0].metric(
+                            "Shares Outstanding", f"{valuation['shares_outstanding']:,.0f}")
+                        share_cols[1].metric(
+                            "Total Enterprise Value", f"${valuation['total_value']:,.0f}")
+
+                    # Buffett's wisdom
+                    st.write("---")
+                    st.caption(
+                        "💡 **Buffett's Rule:** Only buy with a margin of safety of 25-30% or more. 'Price is what you pay, value is what you get.'")
