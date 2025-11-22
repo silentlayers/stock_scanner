@@ -2657,22 +2657,23 @@ with tab_buffett:
                     # Display results
                     st.write("#### Valuation Summary")
 
-                    val_cols = st.columns(4)
+                    val_cols = st.columns(2)
                     val_cols[0].metric(
                         "Current Price",
                         f"${valuation['current_price']:.2f}"
                     )
                     val_cols[1].metric(
                         "Intrinsic Value",
-                        f"${valuation['intrinsic_value']:.2f}",
-                        delta=f"{valuation['margin_of_safety']:.1f}% MOS"
+                        f"${valuation['intrinsic_value']:.2f}"
                     )
-                    val_cols[2].metric(
+
+                    val_cols2 = st.columns(2)
+                    val_cols2[0].metric(
                         "Margin of Safety",
                         f"{valuation['margin_of_safety']:.1f}%",
                         delta="Good" if valuation['margin_of_safety'] >= 20 else "Low"
                     )
-                    val_cols[3].metric(
+                    val_cols2[1].metric(
                         "Recommendation",
                         valuation['recommendation'].split(' - ')[0]
                     )
