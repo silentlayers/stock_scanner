@@ -34,81 +34,81 @@ st.markdown("""
             padding-top: 1rem;
             max-width: 100%;
         }
-        
+
         /* Make title smaller on mobile */
         h1 {
             font-size: 1.5rem !important;
         }
-        
+
         h2 {
             font-size: 1.3rem !important;
         }
-        
+
         h3 {
             font-size: 1.1rem !important;
         }
-        
+
         /* Make tables scrollable horizontally */
         .dataframe {
             font-size: 0.8rem;
             overflow-x: auto;
             display: block;
         }
-        
+
         /* Improve button sizing for mobile */
         .stButton button {
             width: 100%;
             font-size: 0.9rem;
         }
-        
+
         /* Make metrics more compact */
         [data-testid="stMetricValue"] {
             font-size: 1.2rem;
         }
-        
+
         [data-testid="stMetricLabel"] {
             font-size: 0.8rem;
         }
-        
+
         /* Reduce chart heights on mobile */
         .vega-embed {
             max-height: 300px;
         }
-        
+
         /* Faster rendering - reduce animations */
         * {
             transition: none !important;
             animation: none !important;
         }
-        
+
         /* Hide heavy elements initially */
         .stSpinner {
             min-height: 100px;
         }
-        
+
         /* Make tabs scrollable */
         .stTabs [data-baseweb="tab-list"] {
             overflow-x: auto;
             flex-wrap: nowrap;
         }
-        
+
         /* Compact expanders */
         .streamlit-expanderHeader {
             font-size: 0.9rem;
         }
-        
+
         /* Better input fields on mobile */
         .stTextInput input, .stNumberInput input {
             font-size: 16px !important; /* Prevents zoom on iOS */
         }
-        
+
         /* Stack columns vertically on mobile */
         [data-testid="column"] {
             width: 100% !important;
             flex: 1 1 100% !important;
         }
     }
-    
+
     /* Tablet optimization */
     @media only screen and (min-width: 769px) and (max-width: 1024px) {
         .main .block-container {
@@ -116,25 +116,25 @@ st.markdown("""
             padding-right: 2rem;
         }
     }
-    
+
     /* General improvements for all screen sizes */
     /* Better scrolling on tables */
     .dataframe-container {
         overflow-x: auto;
     }
-    
+
     /* Ensure charts are responsive */
     .vega-embed {
         width: 100% !important;
     }
-    
+
     /* Prevent captions from floating into charts */
     .element-container:has(> .stCaption) {
         position: relative;
         clear: both;
         margin-top: 1rem;
     }
-    
+
     /* Add spacing before horizontal dividers */
     hr {
         margin-top: 2rem;
@@ -148,7 +148,7 @@ st.markdown("""
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth <= 768;
     const url = new URL(window.location);
     const currentMobile = url.searchParams.get('_mobile');
-    
+
     if (isMobile && currentMobile !== 'true') {
         url.searchParams.set('_mobile', 'true');
         window.location.replace(url.toString());
@@ -2621,93 +2621,97 @@ with tab_buffett:
     st.write("---")
     st.write("### 💰 Calculate Intrinsic Value")
 
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        # Show available tickers if screening was done
-        if 'buffett_results' in st.session_state and not st.session_state['buffett_results'].empty:
-            available_tickers = st.session_state['buffett_results']['ticker'].tolist(
+    # Show available tickers if screening was done
+    if 'buffett_results' in st.session_state and not st.session_state['buffett_results'].empty:
+        available_tickers = st.session_state['buffett_results']['ticker'].tolist(
+        )
+        selected_ticker = st.selectbox(
+            "Select a stock from screened results",
+            options=available_tickers,
+            help="Choose a stock to calculate intrinsic value"
+        )
+    else:
+        selected_ticker = st.text_input(
+            "Enter ticker symbol",
+            "AAPL",
+            help="Enter a stock ticker to analyze"
+        ).upper()
+
+    if st.button("📊 Calculate Value", use_container_width=True, type="primary"):
+        with st.spinner(f"Calculating intrinsic value for {selected_ticker}..."):
+            valuation = screener.calculate_intrinsic_value(
+                selected_ticker,
+                discount_rate=discount_rate/100,
+                growth_rate=growth_rate/100,
+                terminal_growth=terminal_growth/100
             )
-            selected_ticker = st.selectbox(
-                "Select a stock from screened results",
-                options=available_tickers,
-                help="Choose a stock to calculate intrinsic value"
-            )
+            # Store in session state
+            st.session_state['valuation_result'] = valuation
+            st.session_state['valuation_ticker'] = selected_ticker
+
+    # Display valuation results if available
+    if 'valuation_result' in st.session_state and st.session_state.get('valuation_ticker') == selected_ticker:
+        valuation = st.session_state['valuation_result']
+
+        if 'error' in valuation:
+            st.error(f"❌ {valuation['error']}")
         else:
-            selected_ticker = st.text_input(
-                "Enter ticker symbol",
-                "AAPL",
-                help="Enter a stock ticker to analyze"
-            ).upper()
+            st.success(f"✅ Valuation complete for {selected_ticker}")
 
-    with col2:
-        if st.button("📊 Calculate Value", use_container_width=True):
-            with st.spinner(f"Calculating intrinsic value for {selected_ticker}..."):
-                valuation = screener.calculate_intrinsic_value(
-                    selected_ticker,
-                    discount_rate=discount_rate/100,
-                    growth_rate=growth_rate/100,
-                    terminal_growth=terminal_growth/100
-                )
+            # Display results
+            st.write("#### Valuation Summary")
 
-                if 'error' in valuation:
-                    st.error(f"❌ {valuation['error']}")
-                else:
-                    st.success(f"✅ Valuation complete for {selected_ticker}")
+            val_cols = st.columns(2)
+            val_cols[0].metric(
+                "Current Price",
+                f"${valuation['current_price']:.2f}"
+            )
+            val_cols[1].metric(
+                "Intrinsic Value",
+                f"${valuation['intrinsic_value']:.2f}"
+            )
 
-                    # Display results
-                    st.write("#### Valuation Summary")
+            val_cols2 = st.columns(2)
+            val_cols2[0].metric(
+                "Margin of Safety",
+                f"{valuation['margin_of_safety']:.1f}%",
+                delta="Good" if valuation['margin_of_safety'] >= 20 else "Low"
+            )
+            val_cols2[1].metric(
+                "Recommendation",
+                valuation['recommendation'].split(' - ')[0]
+            )
 
-                    val_cols = st.columns(2)
-                    val_cols[0].metric(
-                        "Current Price",
-                        f"${valuation['current_price']:.2f}"
-                    )
-                    val_cols[1].metric(
-                        "Intrinsic Value",
-                        f"${valuation['intrinsic_value']:.2f}"
-                    )
+            st.info(f"**{valuation['recommendation']}**")
 
-                    val_cols2 = st.columns(2)
-                    val_cols2[0].metric(
-                        "Margin of Safety",
-                        f"{valuation['margin_of_safety']:.1f}%",
-                        delta="Good" if valuation['margin_of_safety'] >= 20 else "Low"
-                    )
-                    val_cols2[1].metric(
-                        "Recommendation",
-                        valuation['recommendation'].split(' - ')[0]
-                    )
+            # Show calculation breakdown
+            with st.expander("📋 Calculation Details", expanded=False):
+                st.write("**DCF Assumptions:**")
+                detail_cols = st.columns(3)
+                detail_cols[0].write(
+                    f"• Discount Rate: {discount_rate}%")
+                detail_cols[1].write(
+                    f"• Growth Rate (10yr): {growth_rate}%")
+                detail_cols[2].write(
+                    f"• Terminal Growth: {terminal_growth}%")
 
-                    st.info(f"**{valuation['recommendation']}**")
+                st.write("**Cash Flow Analysis:**")
+                cf_cols = st.columns(3)
+                cf_cols[0].metric(
+                    "Current FCF", f"${valuation['fcf']:,.0f}")
+                cf_cols[1].metric(
+                    "10-Year PV", f"${valuation['projected_10yr_value']:,.0f}")
+                cf_cols[2].metric(
+                    "Terminal Value PV", f"${valuation['terminal_value']:,.0f}")
 
-                    # Show calculation breakdown
-                    with st.expander("📋 Calculation Details", expanded=False):
-                        st.write("**DCF Assumptions:**")
-                        detail_cols = st.columns(3)
-                        detail_cols[0].write(
-                            f"• Discount Rate: {discount_rate}%")
-                        detail_cols[1].write(
-                            f"• Growth Rate (10yr): {growth_rate}%")
-                        detail_cols[2].write(
-                            f"• Terminal Growth: {terminal_growth}%")
+                st.write("**Per Share:**")
+                share_cols = st.columns(2)
+                share_cols[0].metric(
+                    "Shares Outstanding", f"{valuation['shares_outstanding']:,.0f}")
+                share_cols[1].metric(
+                    "Total Enterprise Value", f"${valuation['total_value']:,.0f}")
 
-                        st.write("**Cash Flow Analysis:**")
-                        cf_cols = st.columns(3)
-                        cf_cols[0].metric(
-                            "Current FCF", f"${valuation['fcf']:,.0f}")
-                        cf_cols[1].metric(
-                            "10-Year PV", f"${valuation['projected_10yr_value']:,.0f}")
-                        cf_cols[2].metric(
-                            "Terminal Value PV", f"${valuation['terminal_value']:,.0f}")
-
-                        st.write("**Per Share:**")
-                        share_cols = st.columns(2)
-                        share_cols[0].metric(
-                            "Shares Outstanding", f"{valuation['shares_outstanding']:,.0f}")
-                        share_cols[1].metric(
-                            "Total Enterprise Value", f"${valuation['total_value']:,.0f}")
-
-                    # Buffett's wisdom
-                    st.write("---")
-                    st.caption(
-                        "💡 **Buffett's Rule:** Only buy with a margin of safety of 25-30% or more. 'Price is what you pay, value is what you get.'")
+            # Buffett's wisdom
+            st.write("---")
+            st.caption(
+                "💡 **Buffett's Rule:** Only buy with a margin of safety of 25-30% or more. 'Price is what you pay, value is what you get.'")
