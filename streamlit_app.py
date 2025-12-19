@@ -839,6 +839,18 @@ with tab_spreads:
                         session, account, 'SPY')
 
                     if summary:
+                        # Debug: Show all positions with DTE
+                        st.write(
+                            f"**Debug: Found {len(summary)} total SPY positions:**")
+                        import pandas as pd
+                        all_df = pd.DataFrame(summary)
+                        st.dataframe(
+                            all_df[['symbol', 'dte', 'expiration',
+                                    'strike', 'option_type', 'quantity']],
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
                         positions_at_21 = [
                             p for p in summary if p['dte'] <= 21]
 
@@ -846,8 +858,7 @@ with tab_spreads:
                             st.warning(
                                 f"⚠️ **{len(positions_at_21)} position(s) at/below 21 DTE**")
 
-                            # Show positions
-                            import pandas as pd
+                            # Show positions at threshold
                             df = pd.DataFrame(positions_at_21)
                             st.dataframe(
                                 df[['symbol', 'dte', 'expiration',
@@ -865,6 +876,8 @@ with tab_spreads:
 
             except Exception as e:
                 st.error(f"Error checking positions: {e}")
+                import traceback
+                st.code(traceback.format_exc())
 
             # 3. Final Authorization Status
             st.write("---")
