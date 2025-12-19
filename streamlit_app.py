@@ -1120,46 +1120,80 @@ with tab_spreads:
                                                 st.rerun()
                                         with col_refresh2:
                                             if st.button("📋 Check Orders", type="secondary", key="check_orders_btn"):
-                                                try:
-                                                    from integrations.tastytrade.orders import get_live_orders
-                                                    live_orders = get_live_orders(
-                                                        session, account)
+                                                with st.spinner("Checking orders..."):
+                                                    try:
+                                                        from integrations.tastytrade.orders import get_live_orders
 
-                                                    spy_close_orders = []
-                                                    for order in live_orders:
-                                                        legs = order.get(
-                                                            'legs', [])
-                                                        symbols = [
-                                                            leg.get('symbol', '') for leg in legs]
-                                                        actions = [
-                                                            leg.get('action', '') for leg in legs]
-
-                                                        # Check if this is a SPY close order
-                                                        is_spy = any(
-                                                            'SPY' in symbol for symbol in symbols)
-                                                        is_close = any(
-                                                            'Close' in action for action in actions)
-
-                                                        if is_spy and is_close:
-                                                            spy_close_orders.append({
-                                                                'id': order.get('id'),
-                                                                'status': order.get('status'),
-                                                                'price': order.get('price')
-                                                            })
-
-                                                    if spy_close_orders:
                                                         st.write(
-                                                            "**📋 Pending Close Orders:**")
-                                                        for order in spy_close_orders:
-                                                            st.write(
-                                                                f"• {order['id']}: {order['status']} @ ${order['price']}")
-                                                    else:
-                                                        st.info(
-                                                            "No pending close orders")
+                                                            "**📋 Checking order status...**")
 
-                                                except Exception as e:
-                                                    st.error(
-                                                        f"Order check failed: {e}")
+                                                        live_orders = get_live_orders(
+                                                            session, account)
+                                                        st.write(
+                                                            f"Found {len(live_orders)} total live orders")
+
+                                                        spy_close_orders = []
+                                                        for order in live_orders:
+                                                            try:
+                                                                legs = order.get(
+                                                                    'legs', [])
+                                                                symbols = [
+                                                                    leg.get('symbol', '') for leg in legs]
+                                                                actions = [
+                                                                    leg.get('action', '') for leg in legs]
+
+                                                                # Check if this is a SPY close order
+                                                                is_spy = any(
+                                                                    'SPY' in symbol for symbol in symbols)
+                                                                is_close = any(
+                                                                    'Close' in action for action in actions)
+
+                                                                if is_spy and is_close:
+                                                                    spy_close_orders.append({
+                                                                        'id': order.get('id'),
+                                                                        'status': order.get('status'),
+                                                                        'price': order.get('price'),
+                                                                        'symbols': symbols,
+                                                                        'actions': actions
+                                                                    })
+                                                            except Exception as order_err:
+                                                                st.warning(
+                                                                    f"Error parsing order: {order_err}")
+                                                                continue
+
+                                                        if spy_close_orders:
+                                                            st.success(
+                                                                f"Found {len(spy_close_orders)} SPY close orders:")
+                                                            for order in spy_close_orders:
+                                                                st.write(
+                                                                    f"**Order {order['id']}:**")
+                                                                st.write(
+                                                                    f"  • Status: **{order['status']}**")
+                                                                st.write(
+                                                                    f"  • Price: ${order['price']}")
+                                                                st.write(
+                                                                    f"  • Symbols: {', '.join(order['symbols'])}")
+                                                                st.write(
+                                                                    f"  • Actions: {', '.join(order['actions'])}")
+
+                                                                if order['status'] == 'Live':
+                                                                    st.warning(
+                                                                        "⚠️ Still pending - may need better pricing")
+                                                                elif order['status'] == 'Filled':
+                                                                    st.success(
+                                                                        "✅ Order filled successfully")
+                                                        else:
+                                                            st.success(
+                                                                "✅ No pending SPY close orders found")
+                                                            st.info(
+                                                                "💡 This means orders may have filled already. Try 'Refresh Positions'.")
+
+                                                    except Exception as e:
+                                                        st.error(
+                                                            f"Failed to check orders: {e}")
+                                                        import traceback
+                                                        st.code(
+                                                            traceback.format_exc())
 
                                     except Exception as e:
                                         st.error(f"Failed: {e}")
