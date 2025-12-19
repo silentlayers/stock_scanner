@@ -2,7 +2,6 @@ import time as time_module
 import streamlit as st
 import pandas as pd
 import altair as alt
-import datetime
 from datetime import datetime as dt
 from zoneinfo import ZoneInfo
 import yfinance as yf
@@ -537,6 +536,10 @@ with tab_signal:
 
         # Enrich with MACD, RSI, and VIX aligned by date for per-day checks
         if not df_plot.empty:
+            # Ensure Date column is properly typed as datetime
+            if not pd.api.types.is_datetime64_any_dtype(df_plot['Date']):
+                df_plot['Date'] = pd.to_datetime(df_plot['Date'])
+
             date_index = pd.DatetimeIndex(df_plot['Date'])
             df_plot['MACD'] = macd_diff.reindex(date_index).values
             df_plot['RSI'] = rsi14.reindex(date_index).values
@@ -545,6 +548,7 @@ with tab_signal:
             # Create ordinal index for continuous X-axis (removes gaps for non-trading days)
             df_plot = df_plot.reset_index(drop=True)
             df_plot['Index'] = df_plot.index
+            # Ensure the Date column accessor is recognized as datetime
             df_plot['DateStr'] = df_plot['Date'].dt.strftime('%Y-%m-%d')
 
             # Compute daily checks - only the filters that matter (RSI > 55 and VIX < 20)
@@ -839,18 +843,6 @@ with tab_spreads:
                         session, account, 'SPY')
 
                     if summary:
-                        # Debug: Show all positions with DTE
-                        st.write(
-                            f"**Debug: Found {len(summary)} total SPY positions:**")
-                        import pandas as pd
-                        all_df = pd.DataFrame(summary)
-                        st.dataframe(
-                            all_df[['symbol', 'dte', 'expiration',
-                                    'strike', 'option_type', 'quantity']],
-                            use_container_width=True,
-                            hide_index=True
-                        )
-
                         positions_at_21 = [
                             p for p in summary if p['dte'] <= 21]
 
@@ -866,6 +858,78 @@ with tab_spreads:
                                 use_container_width=True,
                                 hide_index=True
                             )
+
+                            # Add automated closing functionality
+                            st.write("---")
+                            st.write("**🚨 Automated Position Management:**")
+
+                            col_close1, col_close2 = st.columns([2, 1])
+                            with col_close1:
+                                st.write(
+                                    "These positions have reached 21 DTE and should be closed to avoid assignment risk.")
+                            with col_close2:
+                                if st.button("🔄 Auto-Close All 21 DTE Positions", type="secondary", use_container_width=True):
+                                    st.write(
+                                        "**Initiating automated position closing...**")
+
+                                    with st.spinner("Analyzing and closing positions..."):
+                                        try:
+                                            from core.position_manager import monitor_and_close_positions
+
+                                            # First do a dry run to show what would happen
+                                            dry_results = monitor_and_close_positions(
+                                                session=session,
+                                                account_number=account,
+                                                dte_threshold=21,
+                                                underlying='SPY',
+                                                dry_run=True
+                                            )
+
+                                            if dry_results:
+                                                st.write(
+                                                    "**📋 Dry Run Analysis:**")
+                                                for result in dry_results:
+                                                    st.write(
+                                                        f"• Would close spread: {result['short_leg']} / {result['long_leg']} (DTE: {result['dte']})")
+
+                                                st.write("---")
+
+                                                # Ask for confirmation before actually closing
+                                                if st.button("✅ Confirm - Execute Position Closures", type="primary"):
+                                                    st.write(
+                                                        "**🚀 Executing position closures...**")
+
+                                                    # Actually close the positions
+                                                    actual_results = monitor_and_close_positions(
+                                                        session=session,
+                                                        account_number=account,
+                                                        dte_threshold=21,
+                                                        underlying='SPY',
+                                                        dry_run=False
+                                                    )
+
+                                                    if actual_results:
+                                                        st.success(
+                                                            f"✅ Successfully processed {len(actual_results)} position closures!")
+                                                        for result in actual_results:
+                                                            if 'id' in result:
+                                                                st.write(
+                                                                    f"📤 Order submitted: {result['id']}")
+                                                            else:
+                                                                st.write(
+                                                                    f"📤 Processed: {result}")
+                                                    else:
+                                                        st.warning(
+                                                            "No positions were closed.")
+                                            else:
+                                                st.info(
+                                                    "💡 No positions found that need closing (spreads may already be properly grouped).")
+
+                                        except Exception as close_error:
+                                            st.error(
+                                                f"❌ Error during automated closing: {close_error}")
+                                            import traceback
+                                            st.code(traceback.format_exc())
                         else:
                             st.success(
                                 "✅ **No positions at/below 21 DTE**")
@@ -1482,8 +1546,7 @@ with tab_spreads:
             st.subheader("📋 Live Orders & Testing")
 
             # Show last refresh time
-            import datetime as dt_module
-            current_time = dt_module.datetime.now().strftime("%H:%M:%S")
+            current_time = dt.now().strftime("%H:%M:%S")
             st.caption(f"🕐 Last refreshed: {current_time}")
 
             st.write("**🧪 Sandbox Fill Testing:**")
