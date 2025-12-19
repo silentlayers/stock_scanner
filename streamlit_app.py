@@ -985,6 +985,147 @@ with tab_spreads:
 
     st.write("---")
 
+    # Independent Position Monitoring (Always Available)
+    st.write("### 📊 Position Monitoring & Management")
+
+    # Initialize session state for position monitoring
+    if 'pos_workflow_stage' not in st.session_state:
+        st.session_state.pos_workflow_stage = 'ready'
+    if 'pos_dry_run_results' not in st.session_state:
+        st.session_state.pos_dry_run_results = None
+
+    try:
+        if 'auth_session' in st.session_state:
+            from integrations.tastytrade.account import get_account_numbers
+            from core.position_manager import get_positions_summary
+
+            session = st.session_state['auth_session']
+            accounts = get_account_numbers(session)
+
+            if accounts:
+                account = accounts[0]
+                summary = get_positions_summary(session, account, 'SPY')
+
+                if summary:
+                    # Show current positions
+                    positions_at_21 = [p for p in summary if p['dte'] <= 21]
+
+                    col_pos1, col_pos2, col_pos3 = st.columns([2, 1, 1])
+
+                    with col_pos1:
+                        if positions_at_21:
+                            st.warning(
+                                f"⚠️ **{len(positions_at_21)} position(s) at/below 21 DTE**")
+                            # Show positions at threshold
+                            df_21 = pd.DataFrame(positions_at_21)
+                            st.dataframe(
+                                df_21[['symbol', 'dte', 'expiration',
+                                       'strike', 'option_type', 'quantity']],
+                                use_container_width=True,
+                                hide_index=True
+                            )
+                        else:
+                            st.success("✅ **No positions at/below 21 DTE**")
+                            st.info(f"Monitoring {len(summary)} SPY positions")
+
+                    with col_pos2:
+                        # Show total position count
+                        st.metric("SPY Positions", len(summary))
+                        st.metric("At 21 DTE", len(positions_at_21))
+
+                    with col_pos3:
+                        # Position closing workflow - only show if there are positions to close
+                        if positions_at_21:
+                            if st.session_state.pos_workflow_stage == 'ready':
+                                if st.button("🔄 Auto-Close 21 DTE", type="secondary", use_container_width=True, key="pos_analyze_btn"):
+                                    with st.spinner("Analyzing..."):
+                                        try:
+                                            from core.position_manager import monitor_and_close_positions
+
+                                            dry_results = monitor_and_close_positions(
+                                                session=session,
+                                                account_number=account,
+                                                dte_threshold=21,
+                                                underlying='SPY',
+                                                dry_run=True
+                                            )
+
+                                            st.session_state.pos_dry_run_results = dry_results
+                                            st.session_state.pos_workflow_stage = 'analyzed'
+                                            st.rerun()
+
+                                        except Exception as e:
+                                            st.error(f"Analysis failed: {e}")
+
+                            elif st.session_state.pos_workflow_stage == 'analyzed':
+                                if st.session_state.pos_dry_run_results:
+                                    st.write("**📋 Will Close:**")
+                                    for result in st.session_state.pos_dry_run_results:
+                                        st.write(f"• {result['short_leg']}")
+                                        st.write(f"  /{result['long_leg']}")
+                                        st.write(f"  DTE: {result['dte']}")
+
+                                    if st.button("✅ Execute", type="primary", use_container_width=True, key="pos_execute_btn"):
+                                        st.session_state.pos_workflow_stage = 'executing'
+                                        st.rerun()
+                                    if st.button("❌ Cancel", type="secondary", use_container_width=True, key="pos_cancel_btn"):
+                                        st.session_state.pos_workflow_stage = 'ready'
+                                        st.session_state.pos_dry_run_results = None
+                                        st.rerun()
+                                else:
+                                    st.info("No spreads found")
+                                    if st.button("🔄 Back", type="secondary", use_container_width=True, key="pos_back_btn"):
+                                        st.session_state.pos_workflow_stage = 'ready'
+                                        st.rerun()
+
+                            elif st.session_state.pos_workflow_stage == 'executing':
+                                with st.spinner("Closing..."):
+                                    try:
+                                        from core.position_manager import monitor_and_close_positions
+
+                                        actual_results = monitor_and_close_positions(
+                                            session=session,
+                                            account_number=account,
+                                            dte_threshold=21,
+                                            underlying='SPY',
+                                            dry_run=False
+                                        )
+
+                                        if actual_results:
+                                            st.success(
+                                                f"✅ Closed {len(actual_results)}!")
+                                            for result in actual_results:
+                                                if 'id' in result:
+                                                    st.write(
+                                                        f"Order: {result['id']}")
+                                        else:
+                                            st.warning("None closed")
+
+                                        st.session_state.pos_workflow_stage = 'ready'
+                                        st.session_state.pos_dry_run_results = None
+
+                                        if st.button("🔄 Done", type="secondary", key="pos_done_btn"):
+                                            st.rerun()
+
+                                    except Exception as e:
+                                        st.error(f"Failed: {e}")
+                                        st.session_state.pos_workflow_stage = 'ready'
+                                        if st.button("🔄 Retry", type="secondary", key="pos_retry_btn"):
+                                            st.rerun()
+                        else:
+                            st.info("No positions need closing")
+                else:
+                    st.info("ℹ️ No SPY positions found")
+            else:
+                st.error("No accounts found")
+        else:
+            st.warning("⚠️ Please authenticate first to view positions")
+
+    except Exception as e:
+        st.error(f"Error checking positions: {e}")
+
+    st.write("---")
+
     # Fetch and display spread options
     # TODO: Fetch live account balance when automating
     # Example API call: account_balance = get_account_balance(session)
