@@ -1093,30 +1093,73 @@ with tab_spreads:
 
                                         if actual_results:
                                             st.success(
-                                                f"✅ Closed {len(actual_results)}!")
+                                                f"✅ Submitted {len(actual_results)} close order(s)!")
                                             for result in actual_results:
                                                 if 'id' in result:
                                                     st.write(
-                                                        f"Order: {result['id']}")
+                                                        f"📤 Order ID: {result['id']}")
+
+                                            st.warning(
+                                                "⚠️ **LIVE TRADING**: Close orders submitted. Orders should fill quickly in live markets if priced competitively.")
 
                                             # Clear any cached position data to force refresh
                                             if 'cached_positions' in st.session_state:
                                                 del st.session_state['cached_positions']
 
-                                            st.info(
-                                                "💡 Refreshing positions in 3 seconds to show updated data...")
-
-                                            # Wait a moment for broker systems to update, then refresh
-                                            import time
-                                            time.sleep(3)
                                         else:
                                             st.warning("None closed")
 
                                         st.session_state.pos_workflow_stage = 'ready'
                                         st.session_state.pos_dry_run_results = None
 
-                                        # Auto-refresh after successful close to show updated positions
-                                        st.rerun()
+                                        # Add manual refresh and order status check
+                                        col_refresh1, col_refresh2 = st.columns(
+                                            2)
+                                        with col_refresh1:
+                                            if st.button("🔄 Refresh Positions", type="primary", key="manual_refresh_btn"):
+                                                st.rerun()
+                                        with col_refresh2:
+                                            if st.button("📋 Check Orders", type="secondary", key="check_orders_btn"):
+                                                try:
+                                                    from integrations.tastytrade.orders import get_live_orders
+                                                    live_orders = get_live_orders(
+                                                        session, account)
+
+                                                    spy_close_orders = []
+                                                    for order in live_orders:
+                                                        legs = order.get(
+                                                            'legs', [])
+                                                        symbols = [
+                                                            leg.get('symbol', '') for leg in legs]
+                                                        actions = [
+                                                            leg.get('action', '') for leg in legs]
+
+                                                        # Check if this is a SPY close order
+                                                        is_spy = any(
+                                                            'SPY' in symbol for symbol in symbols)
+                                                        is_close = any(
+                                                            'Close' in action for action in actions)
+
+                                                        if is_spy and is_close:
+                                                            spy_close_orders.append({
+                                                                'id': order.get('id'),
+                                                                'status': order.get('status'),
+                                                                'price': order.get('price')
+                                                            })
+
+                                                    if spy_close_orders:
+                                                        st.write(
+                                                            "**📋 Pending Close Orders:**")
+                                                        for order in spy_close_orders:
+                                                            st.write(
+                                                                f"• {order['id']}: {order['status']} @ ${order['price']}")
+                                                    else:
+                                                        st.info(
+                                                            "No pending close orders")
+
+                                                except Exception as e:
+                                                    st.error(
+                                                        f"Order check failed: {e}")
 
                                     except Exception as e:
                                         st.error(f"Failed: {e}")
