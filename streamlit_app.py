@@ -863,73 +863,105 @@ with tab_spreads:
                             st.write("---")
                             st.write("**🚨 Automated Position Management:**")
 
+                            # Initialize session state for closing workflow
+                            if 'close_workflow_stage' not in st.session_state:
+                                st.session_state.close_workflow_stage = 'ready'
+                            if 'dry_run_results' not in st.session_state:
+                                st.session_state.dry_run_results = None
+
                             col_close1, col_close2 = st.columns([2, 1])
                             with col_close1:
                                 st.write(
                                     "These positions have reached 21 DTE and should be closed to avoid assignment risk.")
-                            with col_close2:
-                                if st.button("🔄 Auto-Close All 21 DTE Positions", type="secondary", use_container_width=True):
-                                    st.write(
-                                        "**Initiating automated position closing...**")
 
-                                    with st.spinner("Analyzing and closing positions..."):
+                            with col_close2:
+                                # Stage 1: Initial analysis button
+                                if st.session_state.close_workflow_stage == 'ready':
+                                    if st.button("🔄 Analyze for Auto-Close", type="secondary", use_container_width=True, key="analyze_close_btn"):
+                                        with st.spinner("Analyzing positions..."):
+                                            try:
+                                                from core.position_manager import monitor_and_close_positions
+
+                                                # Do dry run analysis
+                                                dry_results = monitor_and_close_positions(
+                                                    session=session,
+                                                    account_number=account,
+                                                    dte_threshold=21,
+                                                    underlying='SPY',
+                                                    dry_run=True
+                                                )
+
+                                                st.session_state.dry_run_results = dry_results
+                                                st.session_state.close_workflow_stage = 'analyzed'
+                                                st.rerun()
+
+                                            except Exception as e:
+                                                st.error(
+                                                    f"Analysis failed: {e}")
+
+                                # Stage 2: Show analysis and get confirmation
+                                elif st.session_state.close_workflow_stage == 'analyzed':
+                                    if st.session_state.dry_run_results:
+                                        st.write("**📋 Analysis Results:**")
+                                        for result in st.session_state.dry_run_results:
+                                            st.write(
+                                                f"• Will close: {result['short_leg']} / {result['long_leg']} (DTE: {result['dte']})")
+
+                                        col_a, col_b = st.columns(2)
+                                        with col_a:
+                                            if st.button("✅ Execute", type="primary", use_container_width=True, key="execute_close_btn"):
+                                                st.session_state.close_workflow_stage = 'executing'
+                                                st.rerun()
+                                        with col_b:
+                                            if st.button("❌ Cancel", type="secondary", use_container_width=True, key="cancel_close_btn"):
+                                                st.session_state.close_workflow_stage = 'ready'
+                                                st.session_state.dry_run_results = None
+                                                st.rerun()
+                                    else:
+                                        st.info("💡 No spreads found to close.")
+                                        if st.button("🔄 Back", type="secondary", use_container_width=True, key="back_close_btn"):
+                                            st.session_state.close_workflow_stage = 'ready'
+                                            st.rerun()
+
+                                # Stage 3: Execute closures
+                                elif st.session_state.close_workflow_stage == 'executing':
+                                    with st.spinner("🚀 Executing closures..."):
                                         try:
                                             from core.position_manager import monitor_and_close_positions
 
-                                            # First do a dry run to show what would happen
-                                            dry_results = monitor_and_close_positions(
+                                            # Actually close the positions
+                                            actual_results = monitor_and_close_positions(
                                                 session=session,
                                                 account_number=account,
                                                 dte_threshold=21,
                                                 underlying='SPY',
-                                                dry_run=True
+                                                dry_run=False
                                             )
 
-                                            if dry_results:
-                                                st.write(
-                                                    "**📋 Dry Run Analysis:**")
-                                                for result in dry_results:
-                                                    st.write(
-                                                        f"• Would close spread: {result['short_leg']} / {result['long_leg']} (DTE: {result['dte']})")
-
-                                                st.write("---")
-
-                                                # Ask for confirmation before actually closing
-                                                if st.button("✅ Confirm - Execute Position Closures", type="primary"):
-                                                    st.write(
-                                                        "**🚀 Executing position closures...**")
-
-                                                    # Actually close the positions
-                                                    actual_results = monitor_and_close_positions(
-                                                        session=session,
-                                                        account_number=account,
-                                                        dte_threshold=21,
-                                                        underlying='SPY',
-                                                        dry_run=False
-                                                    )
-
-                                                    if actual_results:
-                                                        st.success(
-                                                            f"✅ Successfully processed {len(actual_results)} position closures!")
-                                                        for result in actual_results:
-                                                            if 'id' in result:
-                                                                st.write(
-                                                                    f"📤 Order submitted: {result['id']}")
-                                                            else:
-                                                                st.write(
-                                                                    f"📤 Processed: {result}")
-                                                    else:
-                                                        st.warning(
-                                                            "No positions were closed.")
+                                            if actual_results:
+                                                st.success(
+                                                    f"✅ Successfully closed {len(actual_results)} positions!")
+                                                for result in actual_results:
+                                                    if 'id' in result:
+                                                        st.write(
+                                                            f"📤 Order ID: {result['id']}")
                                             else:
-                                                st.info(
-                                                    "💡 No positions found that need closing (spreads may already be properly grouped).")
+                                                st.warning(
+                                                    "No positions were closed.")
+
+                                            # Reset workflow
+                                            st.session_state.close_workflow_stage = 'ready'
+                                            st.session_state.dry_run_results = None
+
+                                            if st.button("🔄 Done", type="secondary", key="done_close_btn"):
+                                                st.rerun()
 
                                         except Exception as close_error:
                                             st.error(
-                                                f"❌ Error during automated closing: {close_error}")
-                                            import traceback
-                                            st.code(traceback.format_exc())
+                                                f"❌ Closing failed: {close_error}")
+                                            st.session_state.close_workflow_stage = 'ready'
+                                            if st.button("🔄 Retry", type="secondary", key="retry_close_btn"):
+                                                st.rerun()
                         else:
                             st.success(
                                 "✅ **No positions at/below 21 DTE**")
