@@ -1098,14 +1098,25 @@ with tab_spreads:
                                                 if 'id' in result:
                                                     st.write(
                                                         f"Order: {result['id']}")
+
+                                            # Clear any cached position data to force refresh
+                                            if 'cached_positions' in st.session_state:
+                                                del st.session_state['cached_positions']
+
+                                            st.info(
+                                                "💡 Refreshing positions in 3 seconds to show updated data...")
+
+                                            # Wait a moment for broker systems to update, then refresh
+                                            import time
+                                            time.sleep(3)
                                         else:
                                             st.warning("None closed")
 
                                         st.session_state.pos_workflow_stage = 'ready'
                                         st.session_state.pos_dry_run_results = None
 
-                                        if st.button("🔄 Done", type="secondary", key="pos_done_btn"):
-                                            st.rerun()
+                                        # Auto-refresh after successful close to show updated positions
+                                        st.rerun()
 
                                     except Exception as e:
                                         st.error(f"Failed: {e}")
